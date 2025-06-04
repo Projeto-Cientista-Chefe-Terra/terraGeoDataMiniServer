@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+geopandas
+pandas
+shapely
+numpy
+sqlalchemy
+python-dotenv

@@ -1,0 +1,18 @@
+# 1) Buscar regiões (continua igual)
+curl 'http://127.0.0.1:8000/regioes'
+
+# 2) Buscar municípios de CARIRI (case-insensitive)
+curl 'http://127.0.0.1:8000/municipios?regiao=CARIRI'
+curl 'http://127.0.0.1:8000/municipios?regiao=cariri'
+
+# 3) Buscar GeoJSON de toda a região CARIRI (case-insensitive)
+curl 'http://127.0.0.1:8000/geojson?regiao=CARIRI' | jq .
+curl 'http://127.0.0.1:8000/geojson?regiao=cariri' | jq .
+
+# 4) Buscar GeoJSON só do município Fortaleza (case-insensitive)
+curl 'http://127.0.0.1:8000/geojson?municipio=Fortaleza' | jq .
+curl 'http://127.0.0.1:8000/geojson?municipio=fortaleza' | jq .
+
+# 5) Buscar polígono do município Fortaleza (caso exista como NM_MUN)
+curl 'http://127.0.0.1:8000/geojson_muni?municipio=Fortaleza' | jq .
+curl 'http://127.0.0.1:8000/geojson_muni?municipio=fortaleza' | jq .
