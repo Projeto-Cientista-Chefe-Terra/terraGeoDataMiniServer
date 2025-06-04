@@ -1,6 +1,6 @@
 # terraGeoDataMiniServer
 
-Este micro‐serviço entrega dados da malha fundiária (geometrias e propriedades) armazenados em um banco Postgres/PostGIS.
+Este micro‐serviço entrega dados da malha fundiária (geometrias e propriedades) armazenados em um banco SQLite/Spatialite.
 
 ## Principais arquivos
 
@@ -14,35 +14,26 @@ Este micro‐serviço entrega dados da malha fundiária (geometrias e propriedad
 - **data_service/db.py**: configura conexão com Postgres/PostGIS. Lê credenciais via `.env` ou `os.getenv`.
 
 - **data_service/utils.py**: funções auxiliares (conversão de linha em Feature GeoJSON, limpeza de NaN, etc).
+- **data/terra_data.sqlite**: banco de dados SQLite/Spatialite.
+   (Instalar o sqlite3 e o sqlite3-spatialite para usar o banco de dados)
 
 ## Como usar o mini-servidor?
 
-1. Configure as variáveis de ambiente (ou crie um arquivo `.env` na raiz do projeto)
-
-```bash
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_NAME=terra_data
-DB_USER=terra_user
-DB_PASS=terra_pass
-TABLE_NAME=propriedades
-```
-
-2. Instale dependências (recomenda-se criar um virtualenv)
+1. Instale dependências (recomenda-se criar um virtualenv)
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Carregue os dados CSV no PostGIS (veja `load_into_postgis.py` ou use seu próprio método).
+2. Carregue os dados CSV no PostGIS (veja `load_into_postgis.py` ou use seu próprio método).
 
-4. Inicie o microserviço
+3. Inicie o microserviço
 
 ```bash
 uvicorn data_service.main:app --reload
 ```
 
-5. Endpoints
+4. Endpoints
 
 * http://127.0.0.1:8000/regioes
 * http://127.0.0.1:8000/municipios?regiao=NomeDaRegiao
