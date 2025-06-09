@@ -6,3 +6,6 @@ shapely
 numpy
 sqlalchemy
 python-dotenv
+psycopg2-binary
+GeoAlchemy2
+pydantic-settings
