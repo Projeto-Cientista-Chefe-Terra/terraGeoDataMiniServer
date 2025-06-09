@@ -3,13 +3,11 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-
-from .db import get_sqlalchemy_engine, get_sqlite_connection
+from .db import get_sqlalchemy_engine
 from .utils import row_to_feature
 
-app = FastAPI(title="terraGeoDataMiniServer_SpatiaLite")
+app = FastAPI(title="terraGeoDataMiniServer_PostGIS")
 
-# Permite que qualquer front-end faça requisições CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,70 +16,68 @@ app.add_middleware(
 )
 
 TABLE_MUNICIPIOS = "municipios_ceara"
-TABLE_FUNDOS      = "malha_fundiaria_ceara"
+TABLE_FUNDOS = "malha_fundiaria_ceara"
 
-# ---------------------------------------------------------
-# 1) GET /regioes
-# ---------------------------------------------------------
 @app.get("/regioes")
 def listar_regioes():
     engine = get_sqlalchemy_engine()
     sql = f"""
         SELECT DISTINCT regiao_administrativa
-          FROM "{TABLE_FUNDOS}"
-         WHERE regiao_administrativa IS NOT NULL
-         ORDER BY regiao_administrativa;
+        FROM {TABLE_FUNDOS}
+        WHERE regiao_administrativa IS NOT NULL
+        ORDER BY regiao_administrativa;
     """
-    try:
-        with engine.connect() as conn:
-            result = conn.execute(text(sql))
-            regioes = [row[0] for row in result.fetchall()]
-        return {"regioes": regioes}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao listar regiões: {e}")
+    with engine.connect() as conn:
+        result = conn.execute(text(sql))
+        regioes = [row[0] for row in result.fetchall()]
+    return {"regioes": regioes}
 
-
-# ---------------------------------------------------------
-# 2) GET /municipios?regiao=XYZ
-#    Lista municípios de uma dada região (case-insensitive)
-# ---------------------------------------------------------
 @app.get("/municipios")
 def listar_municipios(
     regiao: str = Query(..., description="Região administrativa (case-insensitive)")
 ):
+    engine = get_sqlalchemy_engine()
     sql = f"""
         SELECT DISTINCT nome_municipio
-          FROM "{TABLE_FUNDOS}"
-         WHERE regiao_administrativa = ? COLLATE NOCASE
-           AND nome_municipio IS NOT NULL
-         ORDER BY nome_municipio;
+        FROM {TABLE_FUNDOS}
+        WHERE regiao_administrativa ILIKE :regiao
+        AND nome_municipio IS NOT NULL
+        ORDER BY nome_municipio;
     """
-    try:
-        with get_sqlite_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT load_extension('mod_spatialite');")
-            cur.execute(sql, (regiao,))
-            rows = cur.fetchall()
-            municipios = [r[0] for r in rows]
-        if not municipios:
+    with engine.connect() as conn:
+        result = conn.execute(text(sql), {"regiao": regiao})
+        municipios = [row[0] for row in result.fetchall()]
+    if not municipios:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Região '{regiao}' não encontrada ou sem municípios."
+        )
+    return {"municipios": municipios}
+
+@app.get("/geojson_muni")
+def obter_geojson_municipio(
+    municipio: str = Query(..., description="Município (case-insensitive)")
+):
+    sql = f"""
+        SELECT ST_AsGeoJSON(wkb_geometry) AS geom_json, "nm_mun" AS nome_municipio
+        FROM {TABLE_MUNICIPIOS}
+        WHERE "nm_mun" ILIKE :municipio;
+    """
+    with get_sqlalchemy_engine().connect() as conn:
+        result = conn.execute(text(sql), {"municipio": municipio})
+        rows = result.fetchall()
+        colnames = ["geom_json", "nome_municipio"]
+        features = [row_to_feature(row, colnames) for row in rows if row[0]]
+        if not features:
             raise HTTPException(
                 status_code=404,
-                detail=f"Região '{regiao}' não encontrada ou sem municípios."
+                detail=f"Município '{municipio}' não encontrado."
             )
-        return {"municipios": municipios}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao listar municípios: {e}")
+    return {"type": "FeatureCollection", "features": features}
 
 
-# ---------------------------------------------------------
-# 3) GET /geojson?regiao=XYZ  ou  ?municipio=YYY
-#    Retorna um GeoJSON da malha fundiária,
-#    filtrando case-insensitive.
-#    Agora, em "municipio", filtramos pelo campo correto da tabela
-#    malha_fundiaria_ceara, que é "nome_municipio" (caso este exista lá).
-# ---------------------------------------------------------
+
+
 @app.get("/geojson")
 def obter_geojson(
     regiao: str = Query(None, description="Região administrativa (case-insensitive)"),
@@ -92,13 +88,11 @@ def obter_geojson(
             status_code=400,
             detail="Informe exatamente um dos parâmetros: 'regiao' OU 'municipio'."
         )
-
     if regiao:
-        where_clause = "regiao_administrativa = ? COLLATE NOCASE"
+        where_clause = "regiao_administrativa ILIKE :param"
         param = regiao
     else:
-        # Aqui filtramos pelo nome do município na malha fundiária
-        where_clause = "nome_municipio = ? COLLATE NOCASE"
+        where_clause = "nome_municipio ILIKE :param"
         param = municipio
 
     prop_cols = [
@@ -109,75 +103,64 @@ def obter_geojson(
         "categoria",
         "municipio_norm"
     ]
-    props_select = ", ".join(prop_cols)
-
+    props_select = ", ".join([f'"{col}"' for col in prop_cols])
     sql = f"""
-        SELECT AsGeoJSON(geometry) AS geom_json, {props_select}
-          FROM "{TABLE_FUNDOS}"
-         WHERE {where_clause};
+        SELECT ST_AsGeoJSON(geom) AS geom_json, {props_select}
+        FROM {TABLE_FUNDOS}
+        WHERE {where_clause};
     """
-    try:
-        features = []
-        with get_sqlite_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT load_extension('mod_spatialite');")
-            cur.execute(sql, (param,))
-            rows = cur.fetchall()
-            colnames = ["geom_json"] + prop_cols
+    with get_sqlalchemy_engine().connect() as conn:
+        result = conn.execute(text(sql), {"param": param})
+        rows = result.fetchall()
+        colnames = ["geom_json"] + prop_cols
+        features = [row_to_feature(row, colnames) for row in rows if row[0]]
+        if not features:
+            filtro = f"região '{regiao}'" if regiao else f"município '{municipio}'"
+            raise HTTPException(
+                status_code=404,
+                detail=f"Nenhuma geometria encontrada para o filtro {filtro}."
+            )
+    return {"type": "FeatureCollection", "features": features}
 
-            if not rows:
-                filtro = f"região '{regiao}'" if regiao else f"município '{municipio}'"
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Nenhuma geometria encontrada para o filtro {filtro}."
-                )
+# @app.get("/dados_por_regiao")
+# def dados_por_regiao(
+#     regiao: str = Query(..., description="Região administrativa (case-insensitive)")
+# ):
+#     """
+#     Retorna para cada município da região todos os dados da tabela malha_fundiaria_ceara,
+#     incluindo o polígono (em GeoJSON) e todos os atributos do banco.
+#     """
+#     engine = get_sqlalchemy_engine()
 
-            for row in rows:
-                features.append(row_to_feature(row, colnames))
+#     # Descobrir dinamicamente todos os campos, exceto as geometrias e ogc_fid
+#     campos_sql = """
+#         SELECT column_name
+#         FROM information_schema.columns
+#         WHERE table_name = :table
+#           AND column_name NOT IN ('wkb_geometry', 'geom', 'ogc_fid')
+#         ORDER BY ordinal_position
+#     """
+#     with engine.connect() as conn:
+#         campos = [row[0] for row in conn.execute(
+#             text(campos_sql), {"table": TABLE_FUNDOS}
+#         ).fetchall()]
 
-        return {"type": "FeatureCollection", "features": features}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao obter GeoJSON: {e}")
-
-
-# ---------------------------------------------------------
-# 4) GET /geojson_muni?municipio=YYY
-#    Retorna um GeoJSON do polígono (multipolígonos) do município,
-#    filtrando pelo campo correto “NM_MUN” na tabela municipios_ceara.
-# ---------------------------------------------------------
-@app.get("/geojson_muni")
-def obter_geojson_municipio(
-    municipio: str = Query(..., description="Município (case-insensitive)")
-):
-    # Usamos NM_MUN (nome original do campo do GeoJSON) na tabela municipios_ceara
-    sql = f"""
-        SELECT AsGeoJSON(geometry) AS geom_json, NM_MUN AS nome_municipio
-          FROM "{TABLE_MUNICIPIOS}"
-         WHERE NM_MUN = ? COLLATE NOCASE;
-    """
-    try:
-        features = []
-        with get_sqlite_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT load_extension('mod_spatialite');")
-            cur.execute(sql, (municipio,))
-            rows = cur.fetchall()
-            # Colnames: primeiro vem geom_json, depois “nome_municipio” (nome que demos a NM_MUN)
-            colnames = ["geom_json", "nome_municipio"]
-
-            if not rows:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Município '{municipio}' não encontrado."
-                )
-
-            for row in rows:
-                features.append(row_to_feature(row, colnames))
-
-        return {"type": "FeatureCollection", "features": features}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erro ao obter GeoJSON de município: {e}")
+#     # Use aspas duplas para proteger nomes de coluna com ponto ou caracteres especiais
+#     props_select = ", ".join([f'"{c}"' for c in campos])
+#     sql = f"""
+#         SELECT ST_AsGeoJSON(wkb_geometry) AS geom_json, {props_select}
+#         FROM {TABLE_FUNDOS}
+#         WHERE regiao_administrativa ILIKE :regiao
+#         ORDER BY nome_municipio;
+#     """
+#     with engine.connect() as conn:
+#         result = conn.execute(text(sql), {"regiao": regiao})
+#         rows = result.fetchall()
+#         colnames = ["geom_json"] + campos
+#         features = [row_to_feature(row, colnames) for row in rows if row[0]]
+#         if not features:
+#             raise HTTPException(
+#                 status_code=404,
+#                 detail=f"Região '{regiao}' não encontrada ou sem dados geoespaciais."
+#             )
+#     return {"type": "FeatureCollection", "features": features}
