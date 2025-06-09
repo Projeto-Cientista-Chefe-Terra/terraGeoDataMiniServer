@@ -143,3 +143,4 @@ data/
 *.sqlite
 *.sql
 *.csv
+*.zip
