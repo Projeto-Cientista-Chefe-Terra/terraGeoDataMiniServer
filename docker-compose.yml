@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: docker.io/postgis/postgis:latest
+    container_name: terra_postgis
+    environment:
+      POSTGRES_USER: terra
+      POSTGRES_PASSWORD: Asdsee;30
+      POSTGRES_DB: geodata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - terra_network  # Usa a rede criada manualmente
+
+  app:
+    build: .
+    container_name: terra_app
+    depends_on:
+      - postgres
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: terra
+      POSTGRES_PASSWORD: Asdsee;30
+      POSTGRES_DB: geodata
+    ports:
+      - "8000:8000"
+    networks:
+      - terra_network  # Usa a mesma rede
+
+volumes:
+  postgres_data:
+
+networks:
+  terra_network:
+    name: terra_network  # Referência à rede existente
+    external: true       # Indica que já foi criada manualmente
