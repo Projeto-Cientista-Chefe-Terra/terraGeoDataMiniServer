@@ -96,16 +96,19 @@ def obter_geojson(
         param = municipio
 
     prop_cols = [
+        "numero_lote",
+        "numero_incra",
+        "situacao_juridica",        
         "modulo_fiscal",
         "area",
         "nome_municipio",
         "regiao_administrativa",
         "categoria",
-        "municipio_norm"
+        "nome_municipio_original"
     ]
     props_select = ", ".join([f'"{col}"' for col in prop_cols])
     sql = f"""
-        SELECT ST_AsGeoJSON(geom) AS geom_json, {props_select}
+        SELECT ST_AsGeoJSON(wkb_geometry) AS geom_json, {props_select}
         FROM {TABLE_FUNDOS}
         WHERE {where_clause};
     """
@@ -121,46 +124,3 @@ def obter_geojson(
                 detail=f"Nenhuma geometria encontrada para o filtro {filtro}."
             )
     return {"type": "FeatureCollection", "features": features}
-
-# @app.get("/dados_por_regiao")
-# def dados_por_regiao(
-#     regiao: str = Query(..., description="Região administrativa (case-insensitive)")
-# ):
-#     """
-#     Retorna para cada município da região todos os dados da tabela malha_fundiaria_ceara,
-#     incluindo o polígono (em GeoJSON) e todos os atributos do banco.
-#     """
-#     engine = get_sqlalchemy_engine()
-
-#     # Descobrir dinamicamente todos os campos, exceto as geometrias e ogc_fid
-#     campos_sql = """
-#         SELECT column_name
-#         FROM information_schema.columns
-#         WHERE table_name = :table
-#           AND column_name NOT IN ('wkb_geometry', 'geom', 'ogc_fid')
-#         ORDER BY ordinal_position
-#     """
-#     with engine.connect() as conn:
-#         campos = [row[0] for row in conn.execute(
-#             text(campos_sql), {"table": TABLE_FUNDOS}
-#         ).fetchall()]
-
-#     # Use aspas duplas para proteger nomes de coluna com ponto ou caracteres especiais
-#     props_select = ", ".join([f'"{c}"' for c in campos])
-#     sql = f"""
-#         SELECT ST_AsGeoJSON(wkb_geometry) AS geom_json, {props_select}
-#         FROM {TABLE_FUNDOS}
-#         WHERE regiao_administrativa ILIKE :regiao
-#         ORDER BY nome_municipio;
-#     """
-#     with engine.connect() as conn:
-#         result = conn.execute(text(sql), {"regiao": regiao})
-#         rows = result.fetchall()
-#         colnames = ["geom_json"] + campos
-#         features = [row_to_feature(row, colnames) for row in rows if row[0]]
-#         if not features:
-#             raise HTTPException(
-#                 status_code=404,
-#                 detail=f"Região '{regiao}' não encontrada ou sem dados geoespaciais."
-#             )
-#     return {"type": "FeatureCollection", "features": features}
