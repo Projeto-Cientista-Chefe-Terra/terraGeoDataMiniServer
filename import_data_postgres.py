@@ -1,5 +1,7 @@
 # import_data.py
 
+#!/usr/bin/env python3
+
 import os
 import subprocess
 import tempfile
@@ -11,7 +13,7 @@ from shapely import wkt
 from config import settings
 
 # Tabelas alvo no PostGIS
-TABLE_FUNDOS = "malha_fundiaria_ceara"
+TABLE_MALHA_FUNDIARIA = "malha_fundiaria_ceara"
 TABLE_MUNICIPIOS = "municipios_ceara"
 
 
@@ -29,7 +31,7 @@ def ogr2ogr_to_db(input_path: str, layer_name: str, input_format: str, force_432
         "-overwrite"
     ]
     if force_4326:
-        cmd.extend(["-t_srs", "EPSG:4326"]);
+        cmd.extend(["-t_srs", "EPSG:4326"])
 
     if input_format.lower() == "csv":
         cmd.extend(["-oo", "GEOM_POSSIBLE_NAMES=geom"])
@@ -49,8 +51,9 @@ def import_malha_fundiaria(csv_path: str):
 
     # 1) Leitura
     df = pd.read_csv(csv_path, low_memory=False)
-    # 2) Verifica colunas
-    obrig = ["modulo_fiscal","area","geom","nome_municipio","regiao_administrativa"]
+
+    # 2) Verifica colunas obrigatórias
+    obrig = ["modulo_fiscal", "area", "geom", "nome_municipio", "regiao_administrativa"]
     for col in obrig:
         if col not in df.columns:
             print(f"✗ Coluna obrigatória '{col}' ausente")
@@ -60,17 +63,16 @@ def import_malha_fundiaria(csv_path: str):
     df["modulo_fiscal"] = df["modulo_fiscal"].astype(float)
     df["area"] = df["area"].astype(float)
 
-    # 4) Filtra WKT inválido
+    # 4) Filtra WKT inválido e converte em Shapely
     df = df[df["geom"].notna()].copy()
-    # 5) WKT → Shapely
     df["geometry"] = df["geom"].apply(lambda s: wkt.loads(s) if pd.notna(s) else None)
     df = df.dropna(subset=["geometry"]).copy()
 
-    # 6) Reprojeção para 4326 (origem presumida EPSG:31984)
+    # 5) Reprojeção para 4326 (origem presumida EPSG:31984)
     gdf = gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:31984")
     gdf = gdf.to_crs(epsg=4326)
 
-    # 7) Classificação por módulo fiscal
+    # 6) Classificação por módulo fiscal
     mf = gdf["modulo_fiscal"]
     area = gdf["area"]
     conds = [
@@ -87,26 +89,26 @@ def import_malha_fundiaria(csv_path: str):
     ]
     gdf["categoria"] = np.select(conds, cats, default="Sem Classificação")
 
-    # 8) Normaliza nome do município
+    # 7) Normaliza nome do município
     gdf["municipio_norm"] = gdf["nome_municipio"].apply(
-        lambda s: unicodedata.normalize("NFKD", s).encode("ASCII","ignore").decode().lower()
+        lambda s: unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode().lower()
     )
 
-    # 9) Exporta GeoJSON temporário
+    # 8) Exporta GeoJSON temporário
     with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
         tmp_path = tmp.name
     gdf.to_file(tmp_path, driver="GeoJSON")
 
-    # 10) Importa para PostGIS (já está em 4326)
-    ogr2ogr_to_db(tmp_path, TABLE_FUNDOS, "GeoJSON", force_4326=False)
+    # 9) Importa para PostGIS
+    ogr2ogr_to_db(tmp_path, TABLE_MALHA_FUNDIARIA, "GeoJSON", force_4326=True)
 
-    # Remove temporário
+    # 10) Remove temporário
     os.remove(tmp_path)
 
 
 def import_municipios(geojson_path: str):
     """
-    Importa GeoJSON de municípios para PostGIS, reprojetando para 4326.
+    Importa GeoJSON de municípios para PostGIS.
     """
     if not os.path.isfile(geojson_path):
         print(f"✗ GeoJSON não encontrado: {geojson_path}")

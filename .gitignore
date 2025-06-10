@@ -144,3 +144,6 @@ data/
 *.sql
 *.csv
 *.zip
+
+#config
+config.py
