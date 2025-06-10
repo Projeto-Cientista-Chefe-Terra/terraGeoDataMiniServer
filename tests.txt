@@ -1,5 +1,3 @@
-
-
 # 1) Buscar todas as regiões disponíveis
 curl 'http://127.0.0.1:8000/regioes' | jq .
 
@@ -7,14 +5,10 @@ curl 'http://127.0.0.1:8000/regioes' | jq .
 curl 'http://127.0.0.1:8000/municipios?regiao=CARIRI' | jq .
 curl 'http://127.0.0.1:8000/municipios?regiao=cariri' | jq .
 
-# 3) Buscar GeoJSON do município Fortaleza
-curl 'http://127.0.0.1:8000/geojson_muni?municipio=Fortaleza' | jq .
-curl 'http://127.0.0.1:8000/geojson_muni?municipio=fortaleza' | jq .
-
-# 4) Buscar GeoJSON de todos os imóveis da região administrativa CARIRI (case-insensitive)
+# 3) Buscar GeoJSON de todos os imóveis da região administrativa CARIRI (case-insensitive)
 curl 'http://127.0.0.1:8000/geojson?regiao=CARIRI' | jq .
 curl 'http://127.0.0.1:8000/geojson?regiao=cariri' | jq .
 
-# 5) Buscar todos os dados (inclusive geoespaciais) dos municípios da região CARIRI (novo endpoint)
-curl 'http://127.0.0.1:8000/dados_por_regiao?regiao=CARIRI' | jq .
-curl 'http://127.0.0.1:8000/dados_por_regiao?regiao=cariri' | jq .
+# 4) Buscar GeoJSON do município Fortaleza
+curl 'http://127.0.0.1:8000/geojson_muni?municipio=Fortaleza' | jq .
+curl 'http://127.0.0.1:8000/geojson_muni?municipio=fortaleza' | jq .
