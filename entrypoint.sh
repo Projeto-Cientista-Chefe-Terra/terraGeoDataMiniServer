@@ -10,5 +10,14 @@ set -euo pipefail # Modo estrito de execução
 # python import_data_postgres.py  | tee -a import_log.txt
 # python import_data_sqlite.py  | tee -a import_log.txt
 
-echo "▶ Iniciando a aplicação FastAPI..."
-exec uvicorn data_service.main:app --host 0.0.0.0 --port 8000
+echo "▶ Executando Terra Geodata Mini-Server..."
+# exec uvicorn data_service.main:app --host 0.0.0.0 --port 8000 #usa o uvicorn - rapido mais com um só Worker
+
+# Usa o gunicorn - servidor com pre-fork, multi-process
+echo "🚀  Iniciando Gunicorn..."
+exec gunicorn data_service.main:app \
+     --worker-class uvicorn.workers.UvicornWorker \
+     --bind 0.0.0.0:8000 \
+     --workers "${GUNICORN_WORKERS}" \
+     --threads "${GUNICORN_THREADS}" \
+     --log-level info
