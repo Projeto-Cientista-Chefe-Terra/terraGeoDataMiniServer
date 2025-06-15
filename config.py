@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str   = "geodata"
 
+    TABLE_GEOM_MUNICIPIOS: str   =  "municipios_ceara"
+    TABLE_DADOS_FUNDIARIOS: str   = "malha_fundiaria_ceara"
+
     @property
     def postgres_dsn(self) -> str:
         return (
