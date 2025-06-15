@@ -1,15 +1,23 @@
 # data_service/db.py
 
-from sqlalchemy import create_engine
-from config import settings
+from sqlalchemy import create_engine, event
+from config import settings, DatabaseType
 
 def get_sqlalchemy_engine():
-    """
-    Retorna um engine SQLAlchemy conectado ao SQLite ou ao Postgres,
-    conforme configuração em settings.DATABASE_TYPE.
-    """
-    if settings.DATABASE_TYPE == "sqlite":
+    if settings.DATABASE_TYPE == DatabaseType.SQLITE:
         uri = f"sqlite:///{settings.SQLITE_PATH}"
-    else:
-        uri = settings.postgres_dsn
-    return create_engine(uri, echo=False, future=True)
+        engine = create_engine(uri, echo=False, future=True)
+
+        # 👇 Carrega a extensão SpatiaLite em cada conexão
+        @event.listens_for(engine, "connect")
+        def load_spatialite(dbapi_connection, connection_record):
+            # habilita carga de extensões
+            dbapi_connection.enable_load_extension(True)
+            # o nome aqui pode variar: 'mod_spatialite', 'libspatialite.so', ...
+            dbapi_connection.load_extension("mod_spatialite")
+
+        return engine
+
+    # Postgres segue normal
+    return create_engine(settings.postgres_dsn, echo=False, future=True)
+
