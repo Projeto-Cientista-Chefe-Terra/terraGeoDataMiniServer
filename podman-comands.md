@@ -16,3 +16,6 @@ podman-compose build
 
 podman-compose down && podman-compose up -d
 
+podman-compose up -d
+
+podman-compose run -e DEV_MODE=1 tgdmserver
