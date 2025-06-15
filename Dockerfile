@@ -3,31 +3,47 @@
 
 FROM python:3.12-slim
 
+# Define diretório de trabalho
 WORKDIR /tgdmserver
 
-# Cria diretório e define permissões
-RUN mkdir -p /app && chown -R 1000:1000 /app
+# Não gerar bytecode .pyc e deixar logs fluindo no stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_ROOT_USER_ACTION=ignore \
+    GUNICORN_WORKERS=4 \
+    GUNICORN_THREADS=8
 
-# Instala GDAL, Spatialite e SQLite
-RUN apt-get update && apt-get install -y \
-    gdal-bin \
-    libgdal-dev \
-    python3-gdal \
-    sqlite3 \
-    libsqlite3-mod-spatialite \
-  && rm -rf /var/lib/apt/lists/*
+# Cria diretório /app (usado pela aplicação) e define permissões
+RUN mkdir -p /app \
+    && chown -R 1000:1000 /app
 
-# Instala as dependências Python
+# Instala dependências do sistema (GDAL, Spatialite, PostgreSQL dev, etc.)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       gdal-bin libgdal-dev python3-gdal \
+       sqlite3 libsqlite3-mod-spatialite \
+       build-essential libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copia e instala dependências Python (incluindo Gunicorn)
 COPY requirements.txt .
-ENV PIP_ROOT_USER_ACTION=ignore
 RUN pip install --upgrade pip \
- && pip install -r requirements.txt
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir gunicorn
 
-# Copia o código e define dono
+# Copia código-fonte da aplicação
 COPY . .
 
 # Expõe a porta do FastAPI
 EXPOSE 8000
+
+# Inicia Gunicorn com UvicornWorker para rodar em produção
+# CMD ["gunicorn", "data_service.main:app", \
+#      "--worker-class", "uvicorn.workers.UvicornWorker", \
+#      "--bind", "0.0.0.0:8000", \
+#      "--workers", "${GUNICORN_WORKERS}", \
+#      "--threads", "${GUNICORN_THREADS}", \
+#      "--log-level", "info"]
 
 COPY entrypoint.sh /tgdmserver/entrypoint.sh
 RUN chmod +x /tgdmserver/entrypoint.sh
