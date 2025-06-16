@@ -29,7 +29,14 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: List[str] = ["*"]
     
     # Configurações de performance
-    GEOMETRY_TOLERANCE: float = 0.0001
+
+    ## Simplicação
+
+    # 0.01: Muito simplificado — para mapas de todo o Brasil ou mundo, onde só quer um contorno “grosso” (e olhe lá!).
+    # 0.001: Já simplifica bem, mas ainda mantém o formato das cidades — geralmente é o valor "seguro" para aplicações web, dashboards, etc.
+    # 0.0005: Muito detalhado, mas ainda reduz um pouco os vértices; fica ótimo para zoom intermediário.
+    # 0.0001: Quase não simplifica; só remove micro-serrilhados ou ruídos de digitização.
+    GEOMETRY_TOLERANCE: float = 0.001
     GEOMETRY_DECIMALS: int = 6
     PREPROCESS_START_HOUR: int = 2
     PREPROCESS_START_MINUTE: int = 0
