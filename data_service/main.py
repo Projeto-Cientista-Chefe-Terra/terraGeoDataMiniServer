@@ -72,7 +72,7 @@ app.add_middleware(BrotliMiddleware, quality=5)
 COMMON_PROPERTY_COLUMNS = [
     "numero_lote", "numero_incra", "situacao_juridica",
     "modulo_fiscal", "area", "nome_municipio",
-    "regiao_administrativa", "categoria", "nome_municipio_original"
+    "regiao_administrativa", "categoria", "nome_municipio_original","nome_municipio_original","imovel","data_criacao_lote","distrito","localidade"
 ]
 
 # ==================== Helpers de Engine e SQL ====================
