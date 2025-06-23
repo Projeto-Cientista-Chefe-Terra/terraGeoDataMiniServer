@@ -257,7 +257,7 @@ def geojson(
     municipio: str = Query(None),
     tolerance: Optional[float] = Query(None, description="Tolerância de simplificação da geometria (opcional)"),
     decimals: Optional[int] = Query(None, description="Número de casas decimais na geometria (opcional)"),
-    limit: int = Query(1000)
+    # limit: int = Query(1000)
 ):
     """GeoJSON de região ou município."""
     if bool(regiao) == bool(municipio):
