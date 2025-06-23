@@ -1,4 +1,4 @@
-# import_data.py
+# import_data_to_postgresa.py
 
 #!/usr/bin/env python3
 
