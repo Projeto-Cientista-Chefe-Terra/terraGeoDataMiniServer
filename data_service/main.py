@@ -20,6 +20,10 @@ from .db import get_sqlalchemy_engine
 from .utils import row_to_feature
 from functools import lru_cache
 
+from typing import Optional
+from geoalchemy2.functions import ST_AsGeoJSON, ST_Transform
+
+
 # ==================== Configuração de Logs ====================
 logger = logging.getLogger("uvicorn")
 logger.setLevel(logging.INFO)
@@ -302,3 +306,101 @@ def dados_fundiarios(
     if not rows:
         raise HTTPException(404, "Nenhum dado encontrado.")
     return [dict(zip(COMMON_PROPERTY_COLUMNS[:-1], r)) for r in rows]
+
+
+@app.get("/geojson_assentamentos")
+def geojson_assentamentos(
+    municipio: str = Query("todos", description="Filtrar por município ('todos' para todos os municípios)"),
+    tolerance: Optional[float] = Query(None, description="Tolerância de simplificação da geometria (opcional)"),
+    decimals: Optional[int] = Query(None, description="Número de casas decimais na geometria (opcional)"),
+):
+    """
+    Retorna todos os assentamentos estaduais do Ceará em formato GeoJSON.
+    Pode ser filtrado por município ou retornar todos quando municipio=todos.
+    Garante geometria em EPSG:4326.
+    """
+    # Colunas que queremos retornar
+    property_columns = [
+        "nome_municipio", 
+        "nome_assentamento", 
+        "nome_municipio_original", 
+        "area",
+    ]
+    
+    # Monta a consulta SQL com transformação para EPSG:4326
+    cols = ", ".join(f'"{c}"' for c in property_columns)
+    
+    # Expressão base para a geometria
+    geom_expr = "ST_Transform(wkb_geometry, 4326)"
+    
+    # Aplica simplificação se os parâmetros forem fornecidos
+    if tolerance is not None:
+        geom_expr = f"ST_SimplifyPreserveTopology({geom_expr}, {tolerance})"
+    
+    # Adiciona a conversão para GeoJSON com controle de decimais
+    if decimals is not None:
+        geom_json_expr = f"ST_AsGeoJSON({geom_expr}, maxdecimaldigits:={decimals})"
+    else:
+        geom_json_expr = f"ST_AsGeoJSON({geom_expr})"
+    
+    sql = f"""
+        SELECT {geom_json_expr} AS geom_json, {cols}
+        FROM assentamentos_estaduais_ceara
+    """
+    
+    params = {}
+    
+    # Adiciona filtro por município se fornecido e não for "todos"
+    if municipio and municipio.lower() != "todos":
+        sql += f" WHERE {_ci_equals('nome_municipio', 'municipio')}"
+        params["municipio"] = municipio
+    
+    with get_engine().connect() as conn:
+        rows = conn.execute(text(sql), params).mappings().all()
+    
+    features = [row_to_feature(r) for r in rows if r.get('geom_json')]
+    
+    if not features:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Nenhum assentamento encontrado{f' para o município {municipio}' if municipio and municipio != 'todos' else ''}"
+        )
+    
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "crs": {
+            "type": "name",
+            "properties": {
+                "name": "urn:ogc:def:crs:EPSG::4326"
+            }
+        }
+    }
+
+def row_to_feature(row):
+    """Converte uma linha do banco de dados para uma feature GeoJSON"""
+    return {
+        "type": "Feature",
+        "geometry": json.loads(row['geom_json']),
+        "properties": {
+            k: v for k, v in row.items() 
+            if k != 'geom_json' and v is not None
+        }
+    }
+
+def _ci_equals(column: str, param: str) -> str:
+    """Helper para comparação case-insensitive no PostgreSQL"""
+    return f"LOWER({column}) = LOWER(:{param})"
+
+@app.get("/assentamentos_municipios")
+def listar_municipios_assentamentos():
+    """Lista todos os municípios que possuem assentamentos estaduais."""
+    sql = """
+        SELECT DISTINCT nome_municipio
+        FROM assentamentos_estaduais_ceara
+        WHERE nome_municipio IS NOT NULL
+        ORDER BY nome_municipio
+    """
+    with get_engine().connect() as conn:
+        rows = conn.execute(text(sql)).fetchall()
+    return {"municipios": [r[0] for r in rows]}
