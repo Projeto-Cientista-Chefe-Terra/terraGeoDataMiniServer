@@ -317,7 +317,6 @@ def geojson_assentamentos(
     """
     Retorna todos os assentamentos estaduais do Ceará em formato GeoJSON.
     Pode ser filtrado por município ou retornar todos quando municipio=todos.
-    Garante geometria em EPSG:4326.
     """
     # Colunas que queremos retornar
     property_columns = [
@@ -327,21 +326,19 @@ def geojson_assentamentos(
         "area",
     ]
     
-    # Monta a consulta SQL com transformação para EPSG:4326
     cols = ", ".join(f'"{c}"' for c in property_columns)
     
-    # Expressão base para a geometria
-    geom_expr = "ST_Transform(wkb_geometry, 4326)"
+    # REMOVA a transformação pois os dados já estão em 4326
+    geom_expr = "geom_wgs84"
     
-    # Aplica simplificação se os parâmetros forem fornecidos
     if tolerance is not None:
         geom_expr = f"ST_SimplifyPreserveTopology({geom_expr}, {tolerance})"
     
-    # Adiciona a conversão para GeoJSON com controle de decimais
+    # Adicione 'options' para remover a dimensão Z
     if decimals is not None:
-        geom_json_expr = f"ST_AsGeoJSON({geom_expr}, maxdecimaldigits:={decimals})"
+        geom_json_expr = f"ST_AsGeoJSON({geom_expr}, maxdecimaldigits := {decimals}, options := 1)"
     else:
-        geom_json_expr = f"ST_AsGeoJSON({geom_expr})"
+        geom_json_expr = f"ST_AsGeoJSON({geom_expr}, options := 1)"
     
     sql = f"""
         SELECT {geom_json_expr} AS geom_json, {cols}
@@ -350,7 +347,6 @@ def geojson_assentamentos(
     
     params = {}
     
-    # Adiciona filtro por município se fornecido e não for "todos"
     if municipio and municipio.lower() != "todos":
         sql += f" WHERE {_ci_equals('nome_municipio', 'municipio')}"
         params["municipio"] = municipio
@@ -358,13 +354,30 @@ def geojson_assentamentos(
     with get_engine().connect() as conn:
         rows = conn.execute(text(sql), params).mappings().all()
     
-    features = [row_to_feature(r) for r in rows if r.get('geom_json')]
+    features = []
+    for row in rows:
+        if not row.get('geom_json'):
+            continue
+        
+        try:
+            geom = json.loads(row['geom_json'])
+            # Garante que não há coordenadas 3D
+            if geom.get('coordinates'):
+                geom['coordinates'] = remove_3d_coordinates(geom['coordinates'])
+            
+            features.append({
+                "type": "Feature",
+                "geometry": geom,
+                "properties": {
+                    k: v for k, v in row.items() 
+                    if k != 'geom_json' and v is not None
+                }
+            })
+        except json.JSONDecodeError:
+            continue
     
     if not features:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Nenhum assentamento encontrado{f' para o município {municipio}' if municipio and municipio != 'todos' else ''}"
-        )
+        raise HTTPException(status_code=404, detail=f"Nenhum assentamento encontrado{f' para {municipio}' if municipio != 'todos' else ''}")
     
     return {
         "type": "FeatureCollection",
@@ -377,20 +390,35 @@ def geojson_assentamentos(
         }
     }
 
-def row_to_feature(row):
-    """Converte uma linha do banco de dados para uma feature GeoJSON"""
-    return {
-        "type": "Feature",
-        "geometry": json.loads(row['geom_json']),
-        "properties": {
-            k: v for k, v in row.items() 
-            if k != 'geom_json' and v is not None
-        }
-    }
+def remove_3d_coordinates(coords):
+    """Remove a terceira dimensão das coordenadas recursivamente"""
+    if isinstance(coords[0], list):
+        return [remove_3d_coordinates(part) for part in coords]
+    return coords[:2]  # Mantém apenas longitude e latitude
 
 def _ci_equals(column: str, param: str) -> str:
-    """Helper para comparação case-insensitive no PostgreSQL"""
     return f"LOWER({column}) = LOWER(:{param})"
+
+def row_to_feature(row):
+    """Converte uma linha do banco para uma feature GeoJSON, removendo coordenadas 3D se existirem"""
+    try:
+        geometry = json.loads(row['geom_json'])
+        
+        # Remove a terceira dimensão se existir
+        if geometry.get('coordinates'):
+            geometry['coordinates'] = remove_3d_coordinates(geometry['coordinates'])
+        
+        return {
+            "type": "Feature",
+            "geometry": geometry,
+            "properties": {
+                k: v for k, v in row.items() 
+                if k != 'geom_json' and v is not None
+            }
+        }
+    except (json.JSONDecodeError, KeyError) as e:
+        print(f"Erro ao processar feature: {e}")
+        return None
 
 @app.get("/assentamentos_municipios")
 def listar_municipios_assentamentos():
