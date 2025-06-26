@@ -1,133 +1,139 @@
 #!/usr/bin/env python3
 
 import os
-import subprocess
-import tempfile
+import psycopg2
 import pandas as pd
-import numpy as np
-import unicodedata
-import geopandas as gpd
-from shapely import wkt
-from config import settings
+from unidecode import unidecode
+from dotenv import load_dotenv
 
-# Tabela alvo no PostGIS
-TABLE_ASSENTAMENTOS = "assentamentos_estaduais_ceara"
 
-def ogr2ogr_to_db(input_path: str, layer_name: str, input_format: str, force_4326: bool = False):
+load_dotenv()
+
+def padronizar_nome_municipio(nome):
     """
-    Usa ogr2ogr para importar arquivo para PostGIS, opcionalmente reprojetando para EPSG:4326.
+    Padroniza o nome do município para minúsculas, sem acentos e substitui espaços por underscore
     """
-    db_dsn = settings.postgres_dsn
-    cmd = [
-        "ogr2ogr",
-        "-f", "PostgreSQL",
-        db_dsn,
-        input_path,
-        "-nln", layer_name,
-        "-overwrite"
-    ]
-    if force_4326:
-        cmd.extend(["-t_srs", "EPSG:4326"])
-
-    if input_format.lower() == "csv":
-        cmd.extend(["-oo", "GEOM_POSSIBLE_NAMES=geom"])
-
-    print(f"Importando {input_path} → tabela '{layer_name}'...")
-    subprocess.run(cmd, check=True)
-    print(f"✔️  Importação de '{layer_name}' concluída")
-
-def normalize_municipio_name(name: str) -> str:
-    """
-    Normaliza o nome do município: minúsculas, sem acentos, espaços substituídos por _
-    """
-    if pd.isna(name):
-        return ""
+    if pd.isna(nome) or not isinstance(nome, str):
+        return None
     
     # Remove acentos e caracteres especiais
-    normalized = unicodedata.normalize('NFKD', str(name))
-    normalized = normalized.encode('ASCII', 'ignore').decode('ASCII')
-    
-    # Converte para minúsculas e substitui espaços por _
-    normalized = normalized.lower().strip().replace(" ", "_")
-    
-    # Remove caracteres inválidos
-    normalized = ''.join(c for c in normalized if c.isalnum() or c == '_')
-    
-    return normalized
+    nome_sem_acentos = unidecode(nome)
+    # Converte para minúsculas
+    nome_minusculo = nome_sem_acentos.lower()
+    # Substitui espaços por underscore
+    nome_padronizado = nome_minusculo.replace(' ', '_')
+    return nome_padronizado
 
-def calculate_area(geom_wkt: str) -> float:
+def processar_nome_assentamento(nome_completo):
     """
-    Calcula a área em hectares a partir da geometria WKT
+    Divide o nome completo do assentamento em município original e nome do assentamento
     """
+    if pd.isna(nome_completo) or not isinstance(nome_completo, str):
+        return None, None, None
+    
+    partes = nome_completo.split('-', 1)
+    
+    if len(partes) == 2:
+        municipio_original = partes[0].strip()
+        nome_assentamento = partes[1].strip()
+    else:
+        municipio_original = nome_completo.strip()
+        nome_assentamento = None
+    
+    # Padroniza o nome do município
+    nome_municipio = padronizar_nome_municipio(municipio_original) if municipio_original else None
+    
+    return municipio_original, nome_assentamento, nome_municipio
+
+def importar_assentamentos():
+    # Configurações do banco de dados a partir do .env
+    db_config = {
+        'host': os.getenv('POSTGRES_HOST'),
+        'database': os.getenv('POSTGRES_DB'),
+        'user': os.getenv('POSTGRES_USER'),
+        'password': os.getenv('POSTGRES_PASSWORD'),
+        'port': os.getenv('POSTGRES_PORT')
+    }
+    
+    # Nome da tabela a partir do .env
+    table_name = os.getenv('TABLE_DADOS_ASSENTAMENTOS')
+    
+    # Caminho para o arquivo CSV
+    csv_path = "data/assentamentos estaduais_Idace 2025_corrigidosporccterra.csv"
+    
     try:
-        geom = wkt.loads(geom_wkt)
-        return geom.area / 10000  # Convertendo m² para hectares
-    except:
-        return None
-
-def process_assentamentos_data(csv_path: str):
-    """
-    Processa o arquivo CSV de assentamentos e prepara para importação.
-    """
-    if not os.path.isfile(csv_path):
-        print(f"✗ CSV não encontrado: {csv_path}")
-        return
-
-    # 1) Leitura do CSV
-    df = pd.read_csv(csv_path, low_memory=False)
-
-    # 2) Verifica colunas obrigatórias
-    required_cols = ["Name", "wkt_geom"]
-    for col in required_cols:
-        if col not in df.columns:
-            print(f"✗ Coluna obrigatória '{col}' ausente")
-            return
-
-    # 3) Processa a coluna Name
-    df[['nome_municipio_original', 'nome_assentamento']] = df['Name'].str.split('-', n=1, expand=True)
+        # Ler o arquivo CSV
+        df = pd.read_csv(csv_path, encoding='utf-8')
+        
+        # Processar os nomes dos assentamentos
+        resultados = df['name'].apply(processar_nome_assentamento).tolist()
+        municipios_originais, nomes_assentamentos, nomes_municipios = zip(*resultados)
+        
+        # Adicionar as novas colunas ao DataFrame
+        df['nome_municipio_original'] = municipios_originais
+        df['nome_assentamento'] = nomes_assentamentos
+        df['nome_municipio'] = nomes_municipios
+        
+        # Conectar ao banco de dados
+        conn = psycopg2.connect(**db_config)
+        cursor = conn.cursor()
+        
+        # Criar a tabela se não existir
+        cursor.execute(f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
+            id SERIAL PRIMARY KEY,
+            nome_municipio VARCHAR(100),
+            nome_municipio_original VARCHAR(100),
+            nome_assentamento VARCHAR(255),
+            area NUMERIC,
+            perimetro NUMERIC,
+            proprietario VARCHAR(255),
+            tipo_assentamento VARCHAR(50),
+            wkt_geometry TEXT,
+            geom GEOMETRY(MULTIPOLYGON, 4326)
+        );
+        """)
+        
+        # Limpar a tabela antes da importação (opcional)
+        cursor.execute(f"TRUNCATE TABLE {table_name};")
+        
+        # Inserir os dados
+        for _, row in df.iterrows():
+            cursor.execute(f"""
+            INSERT INTO {table_name} (
+                nome_municipio, nome_municipio_original, nome_assentamento,
+                area, perimetro, proprietario, tipo_assentamento, wkt_geometry, geom
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, ST_GeomFromText(%s, 4326)
+            );
+            """, (
+                row['nome_municipio'],
+                row['nome_municipio_original'],
+                row['nome_assentamento'],
+                row['area'],
+                row['perimetro'],
+                row['proprietario'],
+                row['tipo_assentamento'],
+                row['wkt_geometry'],
+                row['wkt_geometry']
+            ))
+        
+        # Confirmar as alterações
+        conn.commit()
+        
+        print(f"Importação concluída com sucesso! {len(df)} registros inseridos na tabela {table_name}.")
+        
+    except Exception as e:
+        print(f"Erro durante a importação: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
     
-    # Limpeza dos nomes
-    df['nome_municipio_original'] = df['nome_municipio_original'].str.strip()
-    df['nome_assentamento'] = df['nome_assentamento'].str.strip().str.lower()
-    
-    # Cria coluna normalizada
-    df['nome_municipio'] = df['nome_municipio_original'].apply(normalize_municipio_name)
+    finally:
+        # Fechar a conexão
+        if 'cursor' in locals():
+            cursor.close()
+        if 'conn' in locals():
+            conn.close()
 
-    # 4) Calcula a área a partir da geometria
-    df['area'] = df['wkt_geom'].apply(calculate_area)
-
-    # 5) Seleciona apenas as colunas que serão importadas
-    df = df[['nome_municipio', 'nome_assentamento', 'nome_municipio_original', 'area', 'wkt_geom']].copy()
-
-    # 6) Renomeia a coluna de geometria para 'geom' (padrão PostGIS)
-    df = df.rename(columns={'wkt_geom': 'geom'})
-
-    # 7) Remove linhas sem geometria válida
-    df = df[df['geom'].notna()].copy()
-
-    # 8) Cria GeoDataFrame com a geometria
-    gdf = gpd.GeoDataFrame(
-        df.drop('geom', axis=1),
-        geometry=df['geom'].apply(wkt.loads),
-        crs="EPSG:4326"
-    )
-
-    # 9) Exporta para GeoJSON temporário
-    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
-        tmp_path = tmp.name
-    
-    gdf.to_file(tmp_path, driver='GeoJSON')
-
-    # 10) Importa para PostGIS
-    ogr2ogr_to_db(tmp_path, TABLE_ASSENTAMENTOS, "GeoJSON", force_4326=False)
-
-    # 11) Remove arquivo temporário
-    os.remove(tmp_path)
-
-def main():
-    # Processa os dados tabulares do CSV
-    process_assentamentos_data("data/assentamentos estaduais_Idace 2025_corrigidosporccterra.csv")
-    print("✅ Importação completa!")
-
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    importar_assentamentos()
