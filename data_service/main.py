@@ -324,12 +324,13 @@ def geojson_assentamentos(
         "nome_assentamento", 
         "nome_municipio_original", 
         "area",
+        "perimetro",
+        "tipo_assentamento"
     ]
     
     cols = ", ".join(f'"{c}"' for c in property_columns)
     
-    # REMOVA a transformação pois os dados já estão em 4326
-    geom_expr = "geom_wgs84"
+    geom_expr = "wkt_geometry"
     
     if tolerance is not None:
         geom_expr = f"ST_SimplifyPreserveTopology({geom_expr}, {tolerance})"
@@ -361,9 +362,9 @@ def geojson_assentamentos(
         
         try:
             geom = json.loads(row['geom_json'])
-            # Garante que não há coordenadas 3D
-            if geom.get('coordinates'):
-                geom['coordinates'] = remove_3d_coordinates(geom['coordinates'])
+            # # Garante que não há coordenadas 3D
+            # if geom.get('coordinates'):
+            #     geom['coordinates'] = remove_3d_coordinates(geom['coordinates'])
             
             features.append({
                 "type": "Feature",
@@ -390,11 +391,11 @@ def geojson_assentamentos(
         }
     }
 
-def remove_3d_coordinates(coords):
-    """Remove a terceira dimensão das coordenadas recursivamente"""
-    if isinstance(coords[0], list):
-        return [remove_3d_coordinates(part) for part in coords]
-    return coords[:2]  # Mantém apenas longitude e latitude
+# def remove_3d_coordinates(coords):
+#     """Remove a terceira dimensão das coordenadas recursivamente"""
+#     if isinstance(coords[0], list):
+#         return [remove_3d_coordinates(part) for part in coords]
+#     return coords[:2]  # Mantém apenas longitude e latitude
 
 def _ci_equals(column: str, param: str) -> str:
     return f"LOWER({column}) = LOWER(:{param})"
@@ -404,9 +405,9 @@ def row_to_feature(row):
     try:
         geometry = json.loads(row['geom_json'])
         
-        # Remove a terceira dimensão se existir
-        if geometry.get('coordinates'):
-            geometry['coordinates'] = remove_3d_coordinates(geometry['coordinates'])
+        # # Remove a terceira dimensão se existir
+        # if geometry.get('coordinates'):
+        #     geometry['coordinates'] = remove_3d_coordinates(geometry['coordinates'])
         
         return {
             "type": "Feature",
