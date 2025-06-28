@@ -64,16 +64,7 @@ def importar_assentamentos():
     try:
         # Ler o arquivo CSV
         df = pd.read_csv(csv_path, encoding='utf-8')
-        
-        # Processar os nomes dos assentamentos
-        resultados = df['name'].apply(processar_nome_assentamento).tolist()
-        municipios_originais, nomes_assentamentos, nomes_municipios = zip(*resultados)
-        
-        # Adicionar as novas colunas ao DataFrame
-        df['nome_municipio_original'] = municipios_originais
-        df['nome_assentamento'] = nomes_assentamentos
-        df['nome_municipio'] = nomes_municipios
-        
+              
         # Conectar ao banco de dados
         conn = psycopg2.connect(**db_config)
         cursor = conn.cursor()

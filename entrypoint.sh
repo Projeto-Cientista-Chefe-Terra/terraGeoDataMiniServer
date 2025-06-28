@@ -17,8 +17,8 @@ fi
 # echo "▶ Carregando dados para o banco de dados..."
 # python import_data_to_postgres.py
 
-# echo "▶ Carregando dados dos Assentamentos para o banco de dados..."
-# python import_data_assentamentos_to_postgres.py
+echo "▶ Carregando dados dos Assentamentos para o banco de dados..."
+python import_data_assentamentos_to_postgres.py
 
 echo "▶ Executando Terra Geodata Mini-Server..."
 
