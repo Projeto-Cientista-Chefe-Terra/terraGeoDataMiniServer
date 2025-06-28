@@ -398,12 +398,7 @@ def _ci_equals(column: str, param: str) -> str:
 def row_to_feature(row):
     """Converte uma linha do banco para uma feature GeoJSON, removendo coordenadas 3D se existirem"""
     try:
-        geometry = json.loads(row['geom_json'])
-        
-        # # Remove a terceira dimensão se existir
-        # if geometry.get('coordinates'):
-        #     geometry['coordinates'] = remove_3d_coordinates(geometry['coordinates'])
-        
+        geometry = json.loads(row['geom_json'])       
         return {
             "type": "Feature",
             "geometry": geometry,
