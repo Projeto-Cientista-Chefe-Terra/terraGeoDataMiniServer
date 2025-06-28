@@ -59,7 +59,7 @@ def importar_assentamentos():
     table_name = os.getenv('TABLE_DADOS_ASSENTAMENTOS')
     
     # Caminho para o arquivo CSV
-    csv_path = "data/assentamentos estaduais_Idace 2025_corrigidosporccterra.csv"
+    csv_path = "data/assentamentos_estaduais_federais_ceara.csv"
     
     try:
         # Ler o arquivo CSV
@@ -69,21 +69,25 @@ def importar_assentamentos():
         conn = psycopg2.connect(**db_config)
         cursor = conn.cursor()
         
-        # Criar a tabela se não existir
+        # Cria a tabela se não existir
         cursor.execute(f"""
         CREATE TABLE IF NOT EXISTS {table_name} (
             id SERIAL PRIMARY KEY,
+            cd_sipra vARCHAR(10),
             nome_municipio VARCHAR(100),
             nome_municipio_original VARCHAR(100),
             nome_assentamento VARCHAR(255),
             area NUMERIC,
             perimetro NUMERIC,
-            proprietario VARCHAR(255),
-            tipo_assentamento VARCHAR(50),
+            forma_obtecao VARCHAR(255),
+            tipo_assentamento VARCHAR(10),
+            num_familias NUMERIC,
             wkt_geometry TEXT,
             geom GEOMETRY(MULTIPOLYGON, 4326)
         );
         """)
+        
+        
         
         # Limpar a tabela antes da importação (opcional)
         cursor.execute(f"TRUNCATE TABLE {table_name};")
@@ -92,19 +96,21 @@ def importar_assentamentos():
         for _, row in df.iterrows():
             cursor.execute(f"""
             INSERT INTO {table_name} (
-                nome_municipio, nome_municipio_original, nome_assentamento,
-                area, perimetro, proprietario, tipo_assentamento, wkt_geometry, geom
+                cd_sipra, nome_municipio, nome_municipio_original, nome_assentamento,
+                area, perimetro, forma_obtecao, tipo_assentamento, num_familias, wkt_geometry, geom
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, ST_GeomFromText(%s, 4326)
+                %s,%s,%s, %s, %s, %s, %s, %s, %s, %s, ST_GeomFromText(%s, 4326)
             );
             """, (
+                row['cd_sipra'],
                 row['nome_municipio'],
                 row['nome_municipio_original'],
                 row['nome_assentamento'],
                 row['area'],
                 row['perimetro'],
-                row['proprietario'],
+                row['forma_obtecao'],
                 row['tipo_assentamento'],
+                row['num_familias'],
                 row['wkt_geometry'],
                 row['wkt_geometry']
             ))

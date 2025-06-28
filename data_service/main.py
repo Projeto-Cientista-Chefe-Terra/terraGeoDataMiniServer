@@ -320,13 +320,17 @@ def geojson_assentamentos(
     """
     # Colunas que queremos retornar
     property_columns = [
+        "cd_sipra",
         "nome_municipio", 
         "nome_assentamento", 
         "nome_municipio_original", 
         "area",
         "perimetro",
-        "tipo_assentamento"
+        "tipo_assentamento",
+        "forma_obtecao",
+        "num_familias"
     ]
+    
     
     cols = ", ".join(f'"{c}"' for c in property_columns)
     
@@ -343,7 +347,7 @@ def geojson_assentamentos(
     
     sql = f"""
         SELECT {geom_json_expr} AS geom_json, {cols}
-        FROM assentamentos_estaduais_ceara
+        FROM {settings.TABLE_DADOS_ASSENTAMENTOS}
     """
     
     params = {}
@@ -361,11 +365,7 @@ def geojson_assentamentos(
             continue
         
         try:
-            geom = json.loads(row['geom_json'])
-            # # Garante que não há coordenadas 3D
-            # if geom.get('coordinates'):
-            #     geom['coordinates'] = remove_3d_coordinates(geom['coordinates'])
-            
+            geom = json.loads(row['geom_json'])           
             features.append({
                 "type": "Feature",
                 "geometry": geom,
@@ -391,11 +391,6 @@ def geojson_assentamentos(
         }
     }
 
-# def remove_3d_coordinates(coords):
-#     """Remove a terceira dimensão das coordenadas recursivamente"""
-#     if isinstance(coords[0], list):
-#         return [remove_3d_coordinates(part) for part in coords]
-#     return coords[:2]  # Mantém apenas longitude e latitude
 
 def _ci_equals(column: str, param: str) -> str:
     return f"LOWER({column}) = LOWER(:{param})"
@@ -424,9 +419,9 @@ def row_to_feature(row):
 @app.get("/assentamentos_municipios")
 def listar_municipios_assentamentos():
     """Lista todos os municípios que possuem assentamentos estaduais."""
-    sql = """
+    sql = f"""
         SELECT DISTINCT nome_municipio
-        FROM assentamentos_estaduais_ceara
+        FROM {settings.TABLE_DADOS_ASSENTAMENTOS}
         WHERE nome_municipio IS NOT NULL
         ORDER BY nome_municipio
     """
