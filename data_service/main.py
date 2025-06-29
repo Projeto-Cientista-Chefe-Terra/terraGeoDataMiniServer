@@ -320,66 +320,89 @@ def geojson_assentamentos(
     """
     # Colunas que queremos retornar
     property_columns = [
-        "cd_sipra",
+        "cd_sipra", 
         "nome_municipio", 
         "nome_assentamento", 
         "nome_municipio_original", 
-        "area",
-        "perimetro",
-        "tipo_assentamento",
-        "forma_obtecao",
+        "area", 
+        "perimetro", 
+        "tipo_assentamento", 
+        "forma_obtecao", 
         "num_familias"
     ]
-    
-    
+
+
     cols = ", ".join(f'"{c}"' for c in property_columns)
-    
+
     geom_expr = "wkt_geometry"
-    
+
     if tolerance is not None:
         geom_expr = f"ST_SimplifyPreserveTopology({geom_expr}, {tolerance})"
-    
+
     # Adicione 'options' para remover a dimensão Z
     if decimals is not None:
         geom_json_expr = f"ST_AsGeoJSON({geom_expr}, maxdecimaldigits := {decimals}, options := 1)"
     else:
         geom_json_expr = f"ST_AsGeoJSON({geom_expr}, options := 1)"
-    
+
     sql = f"""
         SELECT {geom_json_expr} AS geom_json, {cols}
         FROM {settings.TABLE_DADOS_ASSENTAMENTOS}
     """
-    
+
     params = {}
-    
+
     if municipio and municipio.lower() != "todos":
         sql += f" WHERE {_ci_equals('nome_municipio', 'municipio')}"
         params["municipio"] = municipio
-    
-    with get_engine().connect() as conn:
-        rows = conn.execute(text(sql), params).mappings().all()
-    
+
+    try:        
+        with get_engine().connect() as conn:
+            rows = conn.execute(text(sql), params).mappings().all()
+    except Exception as e:
+        print(f"Erro ao executar a consulta: {e}")
+
+
+
+
     features = []
     for row in rows:
         if not row.get('geom_json'):
             continue
-        
+
         try:
             geom = json.loads(row['geom_json'])           
+            # features.append({
+            #     "type": "Feature",
+            #     "geometry": geom,
+            #     "properties": {
+            #         k: v for k, v in row.items() 
+            #         if k != 'geom_json' and v is not None
+            #     }
+            # })
             features.append({
                 "type": "Feature",
                 "geometry": geom,
                 "properties": {
-                    k: v for k, v in row.items() 
-                    if k != 'geom_json' and v is not None
+                    "cd_sipra": row.get('cd_sipra'),
+                    "nome_municipio": row.get('nome_municipio'),
+                    "nome_assentamento": row.get('nome_assentamento'),
+                    "nome_municipio_original": row.get('nome_municipio_original'),
+                    "area": row.get('area'),
+                    "perimetro": row.get('perimetro'),
+                    "forma_obtecao": row.get('forma_obtecao'),
+                    "tipo_assentamento": row.get('tipo_assentamento'),
+                    "num_familias": row.get('num_familias')
                 }
             })
-        except json.JSONDecodeError:
+        except Exception as e:
+            print(f"Erro ao processar feature: {e}")
             continue
-    
+
     if not features:
         raise HTTPException(status_code=404, detail=f"Nenhum assentamento encontrado{f' para {municipio}' if municipio != 'todos' else ''}")
     
+
     return {
         "type": "FeatureCollection",
         "features": features,
@@ -389,7 +412,7 @@ def geojson_assentamentos(
                 "name": "urn:ogc:def:crs:EPSG::4326"
             }
         }
-    }
+    } 
 
 
 def _ci_equals(column: str, param: str) -> str:
