@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Nomes das tabelas
     TABLE_GEOM_MUNICIPIOS: str = "municipios_ceara"
     TABLE_DADOS_FUNDIARIOS: str = "malha_fundiaria_ceara"
+    TABLE_DADOS_ASSENTAMENTOS: str = "assentamentos_ceara"
 
     # Configurações de CORS
     ALLOWED_ORIGINS: List[str] = ["*"]
