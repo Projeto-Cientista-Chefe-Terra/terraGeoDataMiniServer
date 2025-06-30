@@ -1,0 +1,71 @@
+@startuml
+title Arquitetura do Terra GeoData Mini-Server
+
+actor User
+
+package "Fontes de Dados (APIs Externas)" {
+    [IDACE API] <<webservice>>
+    [INCRA API] <<webservice>>
+    [EMBRAPA API] <<webservice>>
+}
+
+rectangle "Terra-Geodata-Mini-Server" {
+
+    package "ETL-SERVICE" {
+        [ETLCore]
+        [ETL Core] --> [SQL-GIS]
+        [ETL Core] --> [Import-CSV]
+    }
+
+    database "SQL-GIS" {
+        [PostgreSQL + PostGIS]
+        [SQLite + SpatiaLite]
+    }
+
+
+    rectangle "DATA-SERVICE" {
+        [Data_Service]
+        [Map_Service]
+        [Statistic_Service]
+    }
+
+    rectangle "Caching" {
+        [Cache Manager]
+    }
+
+    rectangle "Workers-Menager" {
+        [Menage Microservice Instances ]
+    }
+}
+
+[IDACE API] --> [ETL Core]
+[INCRA API] --> [ETL Core]
+[EMBRAPA API] --> [ETL Core]
+[DATA-SERVICE] --> [SQL-GIS]
+[DATA-SERVICE] --> [DASHBOARD-APPLICATION]
+User --> [DASHBOARD-APPLICATION]
+
+note bottom of [SQL-GIS]
+Camada de persistência geoespacial  
+SQL-GIS 
+que dá suporte ao PostgreSQL/PostGIS e 
+SQLite/SpatiaLite
+end note
+
+note bottom of [DATA-SERVICE]
+TO-DO: dividir DATA-SERVICE  
+em 3 microserviços 
+(Data_Service,Map_Service,Statistic_Service) 
+para ficar mais escalável
+end note
+
+note left of [ETL-SERVICE]
+TO-DO: 
+1. precisa criar uma pipeline de ETL
+2. precisa criar as rotinas de 
+extração dos dados das APIs, 
+pois só está fazendo o processo de 
+importação dos dados do CSV (import_CSV) 
+end note
+
+@enduml

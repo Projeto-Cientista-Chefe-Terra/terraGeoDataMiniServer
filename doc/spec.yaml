@@ -1,0 +1,255 @@
+openapi: 3.0.0
+servers:
+
+# Added by API Auto Mocking Plugin
+
+* description: SwaggerHub API Auto Mocking
+  url: [https://virtserver.swaggerhub.com/Wellington-Sarmento/Terra\_Data\_Service\_API/1.0.0](https://virtserver.swaggerhub.com/Wellington-Sarmento/Terra_Data_Service_API/1.0.0)
+  info:
+  title: Terra Data Service API
+  version: "1.0.0"
+  description: |
+  API para acesso a dados fundiários e geoespaciais do Ceará.
+  Suporta SQLite/SpatiaLite e PostgreSQL/PostGIS.
+  contact:
+  email: [you@your-company.com](mailto:you@your-company.com)
+  license:
+  name: Apache 2.0
+  url: '[http://www.apache.org/licenses/LICENSE-2.0.html](http://www.apache.org/licenses/LICENSE-2.0.html)'
+  tags:
+* name: developers
+  description: Operações de leitura disponíveis para desenvolvedores
+* name: admins
+  description: Chamadas restritas a administradores (não aplicável atualmente)
+  paths:
+  /health:
+  get:
+  tags:
+  \- developers
+  summary: Verifica saúde do serviço
+  operationId: getHealth
+  description: Retorna status de saúde do serviço
+  responses:
+  '200':
+  description: Serviço saudável
+  content:
+  application/json:
+  schema:
+  \$ref: '#/components/schemas/Health'
+  /regioes:
+  get:
+  tags:
+  \- developers
+  summary: Lista regiões administrativas
+  operationId: listRegions
+  description: Retorna todas as regiões administrativas disponíveis
+  responses:
+  '200':
+  description: Lista de regiões
+  content:
+  application/json:
+  schema:
+  \$ref: '#/components/schemas/RegionList'
+  /municipios:
+  get:
+  tags:
+  \- developers
+  summary: Obtém municípios por região
+  operationId: listMunicipalitiesByRegion
+  description: Retorna municípios pertencentes à região informada (case-insensitive)
+  parameters:
+  \- in: query
+  name: regiao
+  description: Nome da região administrativa
+  required: true
+  schema:
+  type: string
+  responses:
+  '200':
+  description: Lista de municípios
+  content:
+  application/json:
+  schema:
+  \$ref: '#/components/schemas/MunicipalityList'
+  '404':
+  description: Região não encontrada ou sem municípios
+  /municipios\_todos:
+  get:
+  tags:
+  \- developers
+  summary: Lista todos municípios
+  operationId: listAllMunicipalities
+  description: Retorna lista completa de municípios
+  responses:
+  '200':
+  description: Lista completa de municípios
+  content:
+  application/json:
+  schema:
+  \$ref: '#/components/schemas/MunicipalityList'
+  /geojson\_muni:
+  get:
+  tags:
+  \- developers
+  summary: GeoJSON de um município
+  operationId: getMunicipalityGeoJSON
+  description: Retorna GeoJSON simplificado de um único município
+  parameters:
+  \- in: query
+  name: municipio
+  description: Nome do município (case-insensitive)
+  required: true
+  schema:
+  type: string
+  responses:
+  '200':
+  description: GeoJSON do município
+  content:
+  application/json:
+  schema:
+  \$ref: '#/components/schemas/FeatureCollection'
+  '404':
+  description: Município não encontrado
+  /geojson:
+  get:
+  tags:
+  \- developers
+  summary: GeoJSON de região ou município
+  operationId: getGeoJSON
+  description: Retorna GeoJSON simplificado de uma região ou município
+  parameters:
+  \- in: query
+  name: regiao
+  description: Nome da região
+  required: false
+  schema:
+  type: string
+  \- in: query
+  name: municipio
+  description: Nome do município
+  required: false
+  schema:
+  type: string
+  \- in: query
+  name: tolerance
+  description: Tolerância de simplificação (precision)
+  required: false
+  schema:
+  type: number
+  default: 0.01
+  \- in: query
+  name: limit
+  description: Número máximo de features retornadas
+  required: false
+  schema:
+  type: integer
+  default: 1000
+  responses:
+  '200':
+  description: GeoJSON da região ou município
+  content:
+  application/json:
+  schema:
+  \$ref: '#/components/schemas/FeatureCollection'
+  '400':
+  description: Parâmetros inválidos (nenhum ou ambos informados)
+  /dados\_fundiarios:
+  get:
+  tags:
+  \- developers
+  summary: Dados tabulares fundiários
+  operationId: getLandData
+  description: Retorna dados de lotes fundiários sem geometria
+  parameters:
+  \- in: query
+  name: regiao
+  description: Nome da região
+  required: false
+  schema:
+  type: string
+  \- in: query
+  name: municipio
+  description: Nome do município
+  required: false
+  schema:
+  type: string
+  responses:
+  '200':
+  description: Lista de lotes fundiários
+  content:
+  application/json:
+  schema:
+  type: array
+  items:
+  \$ref: '#/components/schemas/LotData'
+  '400':
+  description: Parâmetros inválidos (nenhum ou ambos informados)
+  '404':
+  description: Sem dados para os parâmetros informados
+  components:
+  schemas:
+  Health:
+  type: object
+  properties:
+  status:
+  type: string
+  example: healthy
+  RegionList:
+  type: object
+  properties:
+  regioes:
+  type: array
+  items:
+  type: string
+  example: \["Norte", "Sul"]
+  MunicipalityList:
+  type: object
+  properties:
+  municipios:
+  type: array
+  items:
+  type: string
+  example: \["Fortaleza", "Caucaia"]
+  FeatureCollection:
+  type: object
+  properties:
+  type:
+  type: string
+  example: FeatureCollection
+  features:
+  type: array
+  items:
+  \$ref: '#/components/schemas/Feature'
+  Feature:
+  type: object
+  properties:
+  type:
+  type: string
+  example: Feature
+  geometry:
+  type: object
+  description: GeoJSON geometry
+  properties:
+  type: object
+  description: Propriedades do feature
+  LotData:
+  type: object
+  required: \[numero\_lote, nome\_municipio, area]
+  properties:
+  numero\_lote:
+  type: string
+  numero\_incra:
+  type: string
+  situacao\_juridica:
+  type: string
+  modulo\_fiscal:
+  type: string
+  area:
+  type: number
+  format: float
+  nome\_municipio:
+  type: string
+  regiao\_administrativa:
+  type: string
+  categoria:
+  type: string
