@@ -63,16 +63,22 @@ def import_malha_fundiaria(csv_path: str):
     df["modulo_fiscal"] = df["modulo_fiscal"].astype(float)
     df["area"] = df["area"].astype(float)
 
-    # 4) Filtra WKT inválido e converte em Shapely
+    # 4) Carregar WKT textual (EPSG:31984) e converter para geometria
     df = df[df["geom"].notna()].copy()
     df["geometry"] = df["geom"].apply(lambda s: wkt.loads(s) if pd.notna(s) else None)
     df = df.dropna(subset=["geometry"]).copy()
 
-    # 5) Reprojeção para 4326 (origem presumida EPSG:31984)
+    # 5) Criar GeoDataFrame no CRS projetado correto
     gdf = gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:31984")
+
+    # Calcular área (hectares) e perímetro (quilômetros)
+    gdf["area"] = gdf.geometry.area / 10000.0
+    gdf["perimetro"] = gdf.geometry.length / 1000.0
+
+    # 6) Reprojetar para WGS84 (se precisar para outras análises)
     gdf = gdf.to_crs(epsg=4326)
 
-    # 6) Classificação por módulo fiscal
+    # 7) Classificação por módulo fiscal com base na área já calculada
     mf = gdf["modulo_fiscal"]
     area = gdf["area"]
     conds = [
