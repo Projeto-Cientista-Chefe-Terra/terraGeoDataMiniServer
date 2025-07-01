@@ -1,6 +1,6 @@
-# import_data_to_postgresa.py
-
 #!/usr/bin/env python3
+
+# import_data_to_postgresa.py
 
 import os
 import subprocess
@@ -125,7 +125,7 @@ def import_municipios(geojson_path: str):
 
 
 def main():
-    import_malha_fundiaria("data/dataset-malha-fundiaria-idace_preprocessado-2025-06-06.csv")
+    import_malha_fundiaria("data/dataset-malha-fundiaria-idace_preprocessado-2025-06-26.csv")
     import_municipios("data/geojson-municipios_ceara-normalizado.geojson")
     print("✅ Importação completa!")
 
