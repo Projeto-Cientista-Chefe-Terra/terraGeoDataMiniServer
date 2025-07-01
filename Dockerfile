@@ -1,5 +1,4 @@
 # Dockerfile
-# -----------
 
 FROM python:3.12-slim
 
@@ -13,16 +12,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     GUNICORN_WORKERS=4 \
     GUNICORN_THREADS=8
 
-# Cria diretório /app (usado pela aplicação) e define permissões
-RUN mkdir -p /app \
-    && chown -R 1000:1000 /app
+# Cria diretorios /tgdmserver e /tgdmserver/upload. Define suas permissoes
+    RUN mkdir -p /tgdmserver /tgdmserver/upload \
+    && chown -R 1000:1000 /tgdmserver \
+    && chown -R 1000:1000 /tgdmserver/upload \
+    && chmod -R 664 /tgdmserver/upload
+
 
 # Instala dependências do sistema (GDAL, Spatialite, PostgreSQL dev, etc.)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-       gdal-bin libgdal-dev python3-gdal \
-       sqlite3 libsqlite3-mod-spatialite \
-       build-essential libpq-dev \
+    gdal-bin libgdal-dev python3-gdal \
+    sqlite3 libsqlite3-mod-spatialite \
+    build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia e instala dependências Python (incluindo Gunicorn)

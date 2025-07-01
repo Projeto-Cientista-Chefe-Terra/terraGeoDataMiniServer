@@ -38,12 +38,15 @@ services:
       POSTGRES_DB: geodata
     ports:
       - "8000:8000"
+    volumes:
+      - tgdmserver:/tgdmserver
     networks:
       - terra_network
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  tgdmserver:
 
 networks:
   terra_network:
