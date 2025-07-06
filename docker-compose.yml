@@ -5,9 +5,10 @@ services:
     image: docker.io/postgis/postgis:latest
     container_name: terra_postgis
     environment:
-      POSTGRES_USER: terra
-      POSTGRES_PASSWORD: Asdsee;30
-      POSTGRES_DB: geodata
+      - TZ=America/Fortaleza
+      - POSTGRES_USER=terra
+      - POSTGRES_PASSWORD=Asdsee;30
+      - POSTGRES_DB=geodata
     ports:
       - "5432:5432"
     volumes:
@@ -31,15 +32,14 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: terra
-      POSTGRES_PASSWORD: Asdsee;30
-      POSTGRES_DB: geodata
+      - TZ=America/Fortaleza
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=terra
+      - POSTGRES_PASSWORD=Asdsee;30
+      - POSTGRES_DB=geodata
     ports:
       - "8000:8000"
-    volumes:
-      - tgdmserver:/tgdmserver
     networks:
       - terra_network
     restart: unless-stopped
@@ -50,5 +50,5 @@ volumes:
 
 networks:
   terra_network:
-    name: terra_network  # Referência à rede existente
-    external: true       # Indica que já foi criada manualmente
+    name: terra_network # Referência à rede existente
+    external: true # Indica que já foi criada manualmente

@@ -12,20 +12,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     GUNICORN_WORKERS=4 \
     GUNICORN_THREADS=8
 
-# Cria diretorios /tgdmserver e /tgdmserver/upload. Define suas permissoes
-    RUN mkdir -p /tgdmserver /tgdmserver/upload \
-    && chown -R 1000:1000 /tgdmserver \
+# Cria diretorios /tgdmserver/upload. Define suas permissoes
+RUN mkdir -p /tgdmserver/upload \
     && chown -R 1000:1000 /tgdmserver/upload \
     && chmod -R 664 /tgdmserver/upload
 
+# Configura o timezone
+ENV TZ=America/Fortaleza
 
 # Instala dependências do sistema (GDAL, Spatialite, PostgreSQL dev, etc.)
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-    gdal-bin libgdal-dev python3-gdal \
-    sqlite3 libsqlite3-mod-spatialite \
-    build-essential libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get install -y tzdata && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
+    echo $TZ > /etc/timezone && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copia e instala dependências Python (incluindo Gunicorn)
 COPY requirements.txt .

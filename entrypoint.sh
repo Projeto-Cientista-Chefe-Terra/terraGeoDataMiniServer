@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+
+echo "🚀 ENTRYPOINT script executando...$(date)"
+
 # Verifica se o .env existe
 if [ ! -f .env ]; then
     echo "⚠️  Arquivo .env não encontrado. Usando variáveis de ambiente padrão."
@@ -20,6 +23,9 @@ fi
 
 # echo "▶ Carregando dados dos Assentamentos para o banco de dados..."
 # python import_data_assentamentos_to_postgres.py
+
+# echo "▶ Carregando dados dos Reservatórios para o banco de dados..."
+# python import_data_reservatorios_to_postgres.py
 
 echo "▶ Executando Terra Geodata Mini-Server..."
 
