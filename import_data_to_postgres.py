@@ -2,6 +2,11 @@
 
 # import_data_to_postgresa.py
 
+#TODO Fazer a insercao do Módulo Fiscal correspondente ao município  e inserir na tabela municipios_ceara
+#TODO FAzer a importacao dos dados de Região Administrativa e fazer a insercao deste campo na tabela malha_fundiaria_ceara
+#TODO Fazer a importacao dos modulos fiscais correspondentes a cada municipio cadastrado usando SQL e as duas tabelas, malha_fundiaria_ceara e municipios_ceara
+
+
 import os
 import subprocess
 import tempfile
@@ -15,6 +20,13 @@ from config import settings
 # Tabelas alvo no PostGIS
 TABLE_MALHA_FUNDIARIA = "malha_fundiaria_ceara"
 TABLE_MUNICIPIOS = "municipios_ceara"
+
+
+#PATH dos CSV
+PATH_CSV_MALHA_FUNDIARIA = "data/dataset-malha-fundiaria-idace_preprocessado-2025-07-08.csv"
+PATH_GEOJSON_MUNICIPIOS = "data/geojson-municipios_ceara-normalizado.geojson"
+
+
 
 
 def ogr2ogr_to_db(input_path: str, layer_name: str, input_format: str, force_4326: bool = False):
@@ -96,7 +108,8 @@ def import_malha_fundiaria(csv_path: str):
     gdf["categoria"] = np.select(conds, cats, default="Sem Classificação")
 
     # 7) Normaliza nome do município
-    gdf["municipio_norm"] = gdf["nome_municipio"].apply(
+    gdf["nome_municipio_original"] = gdf["nome_municipio"]
+    gdf["nome_municipio"] = gdf["nome_municipio"].apply(
         lambda s: unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode().lower()
     )
 
@@ -125,8 +138,12 @@ def import_municipios(geojson_path: str):
 
 
 def main():
-    import_malha_fundiaria("data/dataset-malha-fundiaria-idace_preprocessado-2025-06-26.csv")
-    import_municipios("data/geojson-municipios_ceara-normalizado.geojson")
+    print(f"⏳ Preparando para importar ${PATH_CSV_MALHA_FUNDIARIA}...")
+    import_malha_fundiaria(PATH_CSV_MALHA_FUNDIARIA)
+    
+    print(f"⏳Preparando para importar ${PATH_GEOJSON_MUNICIPIOS}...")
+    import_municipios(PATH_GEOJSON_MUNICIPIOS)
+    
     print("✅ Importação completa!")
 
 

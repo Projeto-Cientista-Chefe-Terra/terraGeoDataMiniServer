@@ -224,6 +224,94 @@ testes_assentamentos() {
     read -p $'\nPressione Enter para voltar ao menu...'
 }
 
+
+# Testes Reservatórios
+testes_reservatorios() {
+    clear
+    echo -e "${BLUE}=== TESTES RESERVATÓRIOS ===${NC}"
+    
+    # 1. Listar municípios disponíveis
+    api_request "${API_BASE}/reservatorios_municipios" "1. Listagem de municípios com reservatórios"
+    
+    # Obter a lista de municípios
+    local municipios=$(curl -s "${API_BASE}/reservatorios_municipios" | jq -r '.municipios[]')
+    local primeiro_municipio=$(echo "$municipios" | head -n 1)
+    
+    # 2. Mostrar todos os reservatórios de um município (apenas contagem)
+    if [ -n "$primeiro_municipio" ]; then
+        echo -e "\n${BLUE}2. Obtendo reservatórios para o município '${primeiro_municipio}'${NC}"
+        
+        # Obter todos os reservatórios do município
+        local reservatorios_resp=$(curl -s "${API_BASE}/geojson_reservatorios?municipio=${primeiro_municipio}")
+        local total_reservatorios=$(echo "$reservatorios_resp" | jq '.features | length')
+        
+        echo -e "Total de reservatórios em ${primeiro_municipio}: ${GREEN}${total_reservatorios}${NC}"
+        
+        # 3. Mostrar detalhes de um reservatório específico
+        if [ "$total_reservatorios" -gt 0 ]; then
+            echo -e "\n${BLUE}3. Detalhes do primeiro reservatório em '${primeiro_municipio}'${NC}"
+            
+            # Selecionar o primeiro reservatório
+            local primeiro_reservatorio=$(echo "$reservatorios_resp" | jq '.features[0]')
+            
+            # Mostrar informações relevantes
+            echo "$primeiro_reservatorio" | jq '{
+                tipo: .type,
+                propriedades: .properties | {
+                    nome: .nome,
+                    municipio: .nome_municipio,
+                    capacidade: .capacid_m3,
+                    area: .area_ha,
+                    proprietario: .proprietario,
+                    ano_construcao: .ano_constr
+                },
+                geometria: .geometry.type
+            }'
+            
+            # Mostrar coordenadas da geometria (resumidas)
+            local coords_count=$(echo "$primeiro_reservatorio" | jq '.geometry.coordinates | length')
+            echo -e "\nResumo da geometria:"
+            echo "$primeiro_reservatorio" | jq '{ 
+                tipo_geometria: .geometry.type,
+                total_coordenadas: (.geometry.coordinates | length),
+                primeira_coordenada: .geometry.coordinates[0][0] 
+            }'
+        fi
+    else
+        echo -e "${RED}Nenhum município com reservatórios encontrado.${NC}"
+    fi
+    
+    # 4. Teste com município inexistente
+    local municipio_fake="blaublau"
+    api_request "${API_BASE}/geojson_reservatorios?municipio=${municipio_fake}" "4. Teste com município inexistente"
+    
+    # 5. Teste de todos os reservatórios de todos os municípios
+    echo -e "\n${BLUE}5. Teste de todos os reservatórios de todos os municípios${NC}"
+    local todos_reservatorios_resp=$(curl -s "${API_BASE}/geojson_reservatorios?municipio=todos")
+    local total_todos_reservatorios=$(echo "$todos_reservatorios_resp" | jq '.features | length')
+    echo -e "Total de reservatórios em todos os municípios: ${GREEN}${total_todos_reservatorios}${NC}"
+    
+    if [ "$total_todos_reservatorios" -gt 0 ]; then
+        echo -e "\nResumo do primeiro reservatório de todos os municípios:"
+        echo "$todos_reservatorios_resp" | jq '.features[0] | {
+            tipo: .type,
+            propriedades: .properties | {
+                nome: .nome,
+                municipio: .nome_municipio
+            },
+            geometria: .geometry.type
+        }'
+    fi
+    
+    # 6. Teste de simplificação geométrica (opcional)
+    if [ -n "$primeiro_municipio" ] && [ "$total_reservatorios" -gt 0 ]; then
+        echo -e "\n${BLUE}6. Teste de simplificação geométrica para um reservatório${NC}"
+        api_request "${API_BASE}/geojson_reservatorios?municipio=${primeiro_municipio}&tolerance=0.01&decimals=4" "Reservatório simplificado"
+    fi
+    
+    read -p $'\nPressione Enter para voltar ao menu...'
+}
+
 # Menu principal
 main_menu() {
     check_dependencies
@@ -232,12 +320,13 @@ main_menu() {
         escolha=$(dialog --clear \
             --backtitle "Menu de Testes API Fundiária - Fedora Workstation 42" \
             --title "Escolha uma categoria de testes" \
-            --menu "Selecione a categoria:" 20 60 8 \
+            --menu "Selecione a categoria:" 20 60 9 \
             1 "Testes Gerais da API" \
             2 "Testes GeoJSON" \
             3 "Testes Dados Fundiários" \
             4 "Testes Região ${REGIAO_ESPECIFICA}" \
             5 "Testes Assentamentos" \
+            6 "Testes Reservatórios" \
             0 "Sair" \
             2>&1 >/dev/tty)
 
@@ -248,6 +337,7 @@ main_menu() {
             3) testes_dados_fundiarios ;;
             4) testes_regiao_cariri ;;
             5) testes_assentamentos ;;
+            6) testes_reservatorios ;;
             0) break ;;
             *) echo -e "${RED}Opção inválida!${NC}"; sleep 1;;
         esac
