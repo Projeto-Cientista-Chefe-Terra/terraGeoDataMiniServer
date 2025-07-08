@@ -76,8 +76,8 @@ app.add_middleware(BrotliMiddleware, quality=5)
 COMMON_PROPERTY_COLUMNS = [
     "numero_lote", "numero_incra", "situacao_juridica",
     "modulo_fiscal", "area", "nome_municipio",
-    "regiao_administrativa", "categoria", "nome_municipio_original","nome_municipio_original","imovel","data_criacao_lote","distrito","localidade"
-]
+    "regiao_administrativa", "categoria", "nome_municipio_original","imovel","data_criacao_lote"
+    ]
 
 # ==================== Helpers de Engine e SQL ====================
 @lru_cache()
@@ -372,14 +372,6 @@ def geojson_assentamentos(
 
         try:
             geom = json.loads(row['geom_json'])           
-            # features.append({
-            #     "type": "Feature",
-            #     "geometry": geom,
-            #     "properties": {
-            #         k: v for k, v in row.items() 
-            #         if k != 'geom_json' and v is not None
-            #     }
-            # })
             features.append({
                 "type": "Feature",
                 "geometry": geom,
@@ -440,6 +432,127 @@ def listar_municipios_assentamentos():
     sql = f"""
         SELECT DISTINCT nome_municipio
         FROM {settings.TABLE_DADOS_ASSENTAMENTOS}
+        WHERE nome_municipio IS NOT NULL
+        ORDER BY nome_municipio
+    """
+    with get_engine().connect() as conn:
+        rows = conn.execute(text(sql)).fetchall()
+    return {"municipios": [r[0] for r in rows]}
+
+@app.get("/geojson_reservatorios")
+def geojson_reservatorios(
+    municipio: str = Query("todos", description="Filtrar por município ('todos' para todos os municípios)"),
+    tolerance: Optional[float] = Query(None, description="Tolerância de simplificação da geometria (opcional)"),
+    decimals: Optional[int] = Query(None, description="Número de casas decimais na geometria (opcional)"),
+):
+    """
+    Retorna todos os reservatórios do Ceará em formato GeoJSON.
+    Pode ser filtrado por município ou retornar todos quando municipio=todos.
+    """
+    # Colunas que queremos retornar
+    property_columns = [
+        "id_sagreh",
+        "nome",
+        "proprietario",
+        "gerencia",
+        "reg_hidrog",
+        "nome_municipio",
+        "ini_monito",
+        "ano_constr",
+        "rio_barrad",
+        "ac_jusante",
+        "id_ac_jus",
+        "area_ha",
+        "capacid_m3",
+        "cot_vert_m",
+        "lg_vert_m",
+        "cot_td_m",
+        "tipo_verte"
+    ]
+
+    cols = ", ".join(f'"{c}"' for c in property_columns)
+    geom_expr = "wkt_geometry"
+
+    if tolerance is not None:
+        geom_expr = f"ST_SimplifyPreserveTopology({geom_expr}, {tolerance})"
+
+    if decimals is not None:
+        geom_json_expr = f"ST_AsGeoJSON({geom_expr}, maxdecimaldigits := {decimals}, options := 1)"
+    else:
+        geom_json_expr = f"ST_AsGeoJSON({geom_expr}, options := 1)"
+
+    sql = f"""
+        SELECT {geom_json_expr} AS geom_json, {cols}
+        FROM {settings.TABLE_DADOS_RESERVATORIOS}
+    """
+
+    params = {}
+
+    if municipio and municipio.lower() != "todos":
+        sql += f" WHERE {_ci_equals('nome_municipio', 'municipio')}"
+        params["municipio"] = municipio
+
+    try:        
+        with get_engine().connect() as conn:
+            rows = conn.execute(text(sql), params).mappings().all()
+    except Exception as e:
+        logger.error(f"Erro ao executar a consulta de reservatórios: {e}")
+        raise HTTPException(status_code=500, detail="Erro ao consultar reservatórios")
+
+    features = []
+    for row in rows:
+        if not row.get('geom_json'):
+            continue
+
+        try:
+            geom = json.loads(row['geom_json'])           
+            features.append({
+                "type": "Feature",
+                "geometry": geom,
+                "properties": {
+                    "id_sagreh": row.get('id_sagreh'),
+                    "nome": row.get('nome'),
+                    "proprietario": row.get('proprietario'),
+                    "gerencia": row.get('gerencia'),
+                    "reg_hidrog": row.get('reg_hidrog'),
+                    "nome_municipio": row.get('nome_municipio'),
+                    "ini_monito": row.get('ini_monito'),
+                    "ano_constr": row.get('ano_constr'),
+                    "rio_barrad": row.get('rio_barrad'),
+                    "ac_jusante": row.get('ac_jusante'),
+                    "id_ac_jus": row.get('id_ac_jus'),
+                    "area_ha": row.get('area_ha'),
+                    "capacid_m3": row.get('capacid_m3'),
+                    "cot_vert_m": row.get('cot_vert_m'),
+                    "lg_vert_m": row.get('lg_vert_m'),
+                    "cot_td_m": row.get('cot_td_m'),
+                    "tipo_verte": row.get('tipo_verte')
+                }
+            })
+        except Exception as e:
+            logger.error(f"Erro ao processar feature de reservatório: {e}")
+            continue
+
+    if not features and municipio != "todos":
+        raise HTTPException(status_code=404, detail=f"Nenhum reservatório encontrado para {municipio}")
+    
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "crs": {
+            "type": "name",
+            "properties": {
+                "name": "urn:ogc:def:crs:EPSG::4326"
+            }
+        }
+    }
+
+@app.get("/reservatorios_municipios")
+def listar_municipios_reservatorios():
+    """Lista todos os municípios que possuem reservatórios."""
+    sql = f"""
+        SELECT DISTINCT nome_municipio
+        FROM {settings.TABLE_DADOS_RESERVATORIOS}
         WHERE nome_municipio IS NOT NULL
         ORDER BY nome_municipio
     """

@@ -13,5 +13,6 @@ pydantic-settings==2.9.1
 brotli-asgi==1.4.0
 APScheduler==3.11.0
 python-json-logger==2.0.7
-geojson
-unidecode
+geojson==3.1.0
+unidecode==1.3.8
+pyproj==3.7.1
