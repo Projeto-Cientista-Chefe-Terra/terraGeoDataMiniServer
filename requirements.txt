@@ -1,14 +1,14 @@
 gunicorn==23.0.0
 fastapi==0.115.12
 uvicorn[standard]==0.34.3
-geopandas==1.1.0
 pandas==2.3.0
+geopandas==1.1.0 
 shapely==2.1.1
 numpy==2.3.0
 SQLAlchemy==2.0.41
-python-dotenv==1.1.0
+python-dotenv==1.1.0 
 psycopg2-binary==2.9.10
-GeoAlchemy2==0.17.1
+geoalchemy2==0.17.1 
 pydantic-settings==2.9.1
 brotli-asgi==1.4.0
 APScheduler==3.11.0

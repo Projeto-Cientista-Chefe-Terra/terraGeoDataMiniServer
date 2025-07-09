@@ -108,9 +108,15 @@ def import_malha_fundiaria(csv_path: str):
     gdf["categoria"] = np.select(conds, cats, default="Sem Classificação")
 
     # 7) Normaliza nome do município
-    gdf["nome_municipio_original"] = gdf["nome_municipio"]
+    gdf["nome_municipio_original"] = gdf["nome_municipio"].apply(
+        lambda s: s.title()
+    )
     gdf["nome_municipio"] = gdf["nome_municipio"].apply(
-        lambda s: unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode().lower()
+        lambda s: unicodedata.normalize("NFKD", s)
+        .encode("ASCII", "ignore")
+        .decode()
+        .lower()
+        .replace(" ", "_")
     )
 
     # 8) Exporta GeoJSON temporário
