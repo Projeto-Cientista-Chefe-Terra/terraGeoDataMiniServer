@@ -1,5 +1,9 @@
-# Dockerfile compatível com Docker e Podman
-FROM python:3.12-slim
+# Dockerfile do tgdmserver
+
+FROM python:3.13-slim-bullseye
+
+LABEL maintainer="Wellington Wagner F. Sarmento <wwagner@virtual.ufc.br>" \
+      description="Dockerfile do Terra.Ce"
 
 WORKDIR /tgdmserver
 

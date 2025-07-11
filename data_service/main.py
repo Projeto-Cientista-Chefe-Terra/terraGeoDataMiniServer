@@ -102,7 +102,7 @@ def _geom_sql(
     dec = decimals if decimals is not None else settings.GEOMETRY_DECIMALS
     if settings.DATABASE_TYPE == DatabaseType.SQLITE:
         return f"AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
-    return f"ST_AsGeoJSON(ST_Simplify(wkb_geometry, {tol}), {dec})"
+    return f"ST_AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
 
 # ==================== Listagem de Regiões e Municípios ====================
 @lru_cache(maxsize=1)
