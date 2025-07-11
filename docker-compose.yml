@@ -1,5 +1,5 @@
-# docker-compose.yml
-# -----------
+# docker-compose.yml do terraGEoDataMiniServer
+
 services:
   postgres:
     image: docker.io/postgis/postgis:latest
@@ -43,6 +43,23 @@ services:
     networks:
       - terra_network
     restart: unless-stopped
+    
+
+
+  dfundce:
+    build:
+      context: ../dashboard_fundiario_ceara
+      dockerfile: Dockerfile
+    container_name: dashboard_fundiario_ce
+    environment:
+      - TZ=America/Fortaleza
+      - DATA_SERVICE_URL=http://tgdmserver:8000
+    ports:
+      - "8501:8501"
+    networks:
+      - terra_network
+    restart: unless-stopped
+
 
 volumes:
   postgres_data:
@@ -50,5 +67,5 @@ volumes:
 
 networks:
   terra_network:
-    name: terra_network # Referência à rede existente
+    name: terra_network
     external: true # Indica que já foi criada manualmente
