@@ -76,8 +76,8 @@ app.add_middleware(BrotliMiddleware, quality=5)
 COMMON_PROPERTY_COLUMNS = [
     "numero_lote", "numero_incra", "situacao_juridica",
     "modulo_fiscal", "area", "nome_municipio",
-    "regiao_administrativa", "categoria", "nome_municipio_original","nome_municipio_original","imovel","data_criacao_lote","distrito","localidade"
-]
+    "regiao_administrativa", "categoria", "nome_municipio_original","imovel","data_criacao_lote"
+    ]
 
 # ==================== Helpers de Engine e SQL ====================
 @lru_cache()
@@ -102,7 +102,7 @@ def _geom_sql(
     dec = decimals if decimals is not None else settings.GEOMETRY_DECIMALS
     if settings.DATABASE_TYPE == DatabaseType.SQLITE:
         return f"AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
-    return f"ST_AsGeoJSON(ST_Simplify(wkb_geometry, {tol}), {dec})"
+    return f"ST_AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
 
 # ==================== Listagem de Regiões e Municípios ====================
 @lru_cache(maxsize=1)
@@ -237,23 +237,65 @@ def listar_todos_municipios():
         rows = conn.execute(text(sql)).fetchall()
     return {"municipios": [r[0] for r in rows]}
 
+# @app.get("/geojson_muni")
+# def geojson_muni(municipio: str = Query(..., description="Município case-insensitive.")):
+#     """GeoJSON de município."""
+#     geom_expr = _geom_sql()
+#     where = _ci_equals("\"nm_mun\"", "municipio")
+#     sql = f"""
+#         SELECT {geom_expr} AS geom_json,
+#                \"nm_mun\" AS nome_municipio
+#         FROM {settings.TABLE_GEOM_MUNICIPIOS}
+#         WHERE {where};
+#     """
+#     with get_engine().connect() as conn:
+#         rows = conn.execute(text(sql), {"municipio": municipio}).mappings().all()
+#     features = [row_to_feature(r) for r in rows if r.get('geom_json')]
+#     if not features:
+#         raise HTTPException(404, f"Município '{municipio}' não encontrado.")
+#     return {"type": "FeatureCollection", "features": features}
+
 @app.get("/geojson_muni")
-def geojson_muni(municipio: str = Query(..., description="Município case-insensitive.")):
-    """GeoJSON de município."""
+def geojson_muni(municipio: str = Query(..., description="Município case-insensitive ou 'todos' para retornar todos os municípios.")):
+    """GeoJSON de município(s). Retorna todos se município='todos'."""
     geom_expr = _geom_sql()
-    where = _ci_equals("\"nm_mun\"", "municipio")
-    sql = f"""
-        SELECT {geom_expr} AS geom_json,
-               \"nm_mun\" AS nome_municipio
-        FROM {settings.TABLE_GEOM_MUNICIPIOS}
-        WHERE {where};
-    """
+    
+    # Construção dinâmica da query SQL
+    if municipio.lower() == "todos":
+        sql = f"""
+            SELECT {geom_expr} AS geom_json,
+                   \"nm_mun\" AS nome_municipio
+            FROM {settings.TABLE_GEOM_MUNICIPIOS};
+        """
+        params = {}
+    else:
+        where = _ci_equals("\"nm_mun\"", "municipio")
+        sql = f"""
+            SELECT {geom_expr} AS geom_json,
+                   \"nm_mun\" AS nome_municipio
+            FROM {settings.TABLE_GEOM_MUNICIPIOS}
+            WHERE {where};
+        """
+        params = {"municipio": municipio}
+
     with get_engine().connect() as conn:
-        rows = conn.execute(text(sql), {"municipio": municipio}).mappings().all()
+        rows = conn.execute(text(sql), params).mappings().all()
+    
     features = [row_to_feature(r) for r in rows if r.get('geom_json')]
+    
     if not features:
-        raise HTTPException(404, f"Município '{municipio}' não encontrado.")
-    return {"type": "FeatureCollection", "features": features}
+        if municipio.lower() != "todos":
+            raise HTTPException(404, f"Município '{municipio}' não encontrado.")
+        else:
+            raise HTTPException(404, "Nenhum município encontrado na base de dados.")
+    
+    return {
+        "type": "FeatureCollection", 
+        "features": features,
+        "properties": {
+            "total_municipios": len(features) if municipio.lower() == "todos" else 1
+        }
+    }
 
 @app.get("/geojson")
 def geojson(
@@ -372,14 +414,6 @@ def geojson_assentamentos(
 
         try:
             geom = json.loads(row['geom_json'])           
-            # features.append({
-            #     "type": "Feature",
-            #     "geometry": geom,
-            #     "properties": {
-            #         k: v for k, v in row.items() 
-            #         if k != 'geom_json' and v is not None
-            #     }
-            # })
             features.append({
                 "type": "Feature",
                 "geometry": geom,
@@ -446,3 +480,94 @@ def listar_municipios_assentamentos():
     with get_engine().connect() as conn:
         rows = conn.execute(text(sql)).fetchall()
     return {"municipios": [r[0] for r in rows]}
+
+@app.get("/geojson_reservatorios")
+def geojson_reservatorios(
+    municipio: str = Query("todos", description="Filtrar por município ('todos' pra geral)"),
+    tolerance: Optional[float] = Query(0.001, description="Tolerância de simplificação (opc.)"),
+    decimals: Optional[int] = Query(4, description="Casas decimais na geometria (opc.)"),
+):
+    """
+    Retorna reservatórios em GeoJSON, usando o WKT em `wkt_geom`.
+    """
+    props = [
+        "id_sagreh", "nome", "proprietario", "gerencia", "reg_hidrog",
+        "nome_municipio", "nome_municipio_original","ini_monito", "ano_constr", "o_barrad",
+        "ac_jusante", "id_ac_jus", "area_ha", "capacid_m3",
+        "cot_vert_m", "lg_vert_m", "cot_td_m", "tipo_verte","ri"
+    ]
+    cols = ", ".join(f'"{c}"' for c in props)
+
+    # Fonte de geometria: WKT
+    geom_expr = "ST_GeomFromText(wkt_geom, 4326)"
+    if tolerance is not None:
+        geom_expr = f"ST_SimplifyPreserveTopology({geom_expr}, {tolerance})"
+
+    # Gera GeoJSON
+    if decimals is not None:
+        geojson_expr = f"ST_AsGeoJSON({geom_expr}, {decimals})"
+    else:
+        geojson_expr = f"ST_AsGeoJSON({geom_expr})"
+
+    sql = f"""
+    SELECT
+        {geojson_expr} AS geom_json,
+        {cols}
+      FROM {settings.TABLE_DADOS_RESERVATORIOS}
+    """
+    params = {}
+    if municipio.lower() != "todos":
+        sql += " WHERE " + _ci_equals("nome_municipio", "municipio")
+        params["municipio"] = municipio
+
+    try:
+        with get_engine().connect() as conn:
+            rows = conn.execute(text(sql), params).mappings().all()
+    except Exception as e:
+        logger.error("Erro geojson_reservatorios: %s", e)
+        raise HTTPException(500, "Erro ao consultar GeoJSON")
+
+    features = []
+    for row in rows:
+        geom_json = row.get("geom_json")
+        if not geom_json:
+            continue
+        try:
+            features.append({
+                "type": "Feature",
+                "geometry": json.loads(geom_json),
+                "properties": {k: row[k] for k in props}
+            })
+        except Exception as e:
+            logger.warning("Feature inválida ignorada: %s", e)
+            continue
+
+    if not features and municipio.lower() != "todos":
+        raise HTTPException(404, f"Nenhum reservatório para '{municipio}'")
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "crs": {
+            "type": "name",
+            "properties": {"name": "urn:ogc:def:crs:EPSG::4326"}
+        }
+    }
+
+@app.get("/reservatorios_municipios")
+def listar_municipios_reservatorios():
+    """Lista municípios que têm reservatórios (coluna nome_municipio)."""
+    sql = f"""
+      SELECT DISTINCT nome_municipio
+        FROM {settings.TABLE_DADOS_RESERVATORIOS}
+       WHERE nome_municipio IS NOT NULL
+    ORDER BY nome_municipio
+    """
+    try:
+        with get_engine().connect() as conn:
+            municipios = conn.execute(text(sql)).scalars().all()
+    except Exception as e:
+        logger.error("Erro listar_municipios_reservatorios: %s", e)
+        raise HTTPException(500, "Erro ao listar municípios")
+
+    return {"municipios": municipios}

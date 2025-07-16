@@ -1,17 +1,32 @@
-gunicorn==23.0.0
-fastapi==0.115.12
-uvicorn[standard]==0.34.3
-geopandas==1.1.0
-pandas==2.3.0
-shapely==2.1.1
-numpy==2.3.0
-SQLAlchemy==2.0.41
-python-dotenv==1.1.0
-psycopg2-binary==2.9.10
-GeoAlchemy2==0.17.1
-pydantic-settings==2.9.1
-brotli-asgi==1.4.0
-APScheduler==3.11.0
-python-json-logger==2.0.7
-geojson
+# gunicorn serve FastAPI via Uvicorn
+gunicorn
+
+# web framework
+fastapi
+uvicorn[standard]
+
+# ciência de dados
+numpy
+pandas
+geopandas
+shapely
+pyproj
+
+# banco de dados
+SQLAlchemy
+psycopg2-binary
+geoalchemy2
+
+# settings, .env, logs
+python-dotenv
+pydantic-settings
+python-json-logger
+
+# formatação GeoJSON e unidecode
+GeoJSON
 unidecode
+
+# agendador e compressão HTTP
+APScheduler
+brotli-asgi
+
