@@ -1,5 +1,9 @@
 #!/bin/bash
+
 set -euo pipefail
+
+
+echo "🚀 ENTRYPOINT script executando...$(date)"
 
 # Verifica se o .env existe
 if [ ! -f .env ]; then
@@ -14,11 +18,14 @@ if [ "${DATABASE_TYPE:-postgres}" == "sqlite" ] && [ ! -d "$(dirname "${SQLITE_P
     mkdir -p "$(dirname "${SQLITE_PATH:-data/geodata.sqlite}")"
 fi
 
-# echo "▶ Carregando dados para o banco de dados..."
-# python import_data_to_postgres.py
+echo "▶ Carregando dados para o banco de dados..."
+python import_data_to_postgres.py
 
 echo "▶ Carregando dados dos Assentamentos para o banco de dados..."
 python import_data_assentamentos_to_postgres.py
+
+echo "▶ Carregando dados dos Reservatórios para o banco de dados..."
+python import_data_reservatorios_to_postgres.py
 
 echo "▶ Executando Terra Geodata Mini-Server..."
 
