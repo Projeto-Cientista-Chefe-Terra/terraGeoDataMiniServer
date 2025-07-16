@@ -26,7 +26,8 @@ services:
   tgdmserver:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.tgdmserver
+    image: terra_geodata_mini_server:latest
     container_name: terra_geodata_mini_server
     depends_on:
       postgres:
@@ -43,13 +44,15 @@ services:
     networks:
       - terra_network
     restart: unless-stopped
+
     
 
 
   dfundce:
     build:
       context: ../dashboard_fundiario_ceara
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dfundce
+    image: dashboard_fundiario_ce:latest
     container_name: dashboard_fundiario_ce
     environment:
       - TZ=America/Fortaleza
