@@ -145,9 +145,11 @@ data/
 *.csv
 *.zip
 
-#config
-config.py
-
 #outros
 para_averiguacao/
 logs/
+
+#config
+config.py
+test_geoapi.py
+colunas_dos_datasets.txt

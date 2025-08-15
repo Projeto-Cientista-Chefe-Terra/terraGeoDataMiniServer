@@ -6,3 +6,14 @@ id_sagreh,nome,proprietario,gerencia,reg_hidrog,nome_municipio,ini_monito,ano_co
 
 ASSENTAMENTOS FEDERAIS E ESTADUAIS:
 nome_assentamento,nome_municipio_original,forma_obtecao,num_familias,tipo_assentamento,nome_municipio,cd_sipra,wkt_geometry,area,perimetro
+
+
+Colunas usadas do IDACE:
+lote_id,nome_municipio,numero_lote,data_criacao_lote,data_modificacao_lote,imovel,situacao_juridica,numero_incra,numero_titulo,cadastro_aprovado,geometry,nome_proprietario
+
+GeoAPI:
+id,municipio,proprietario,cpfcnpj,imovel,multipolygon, centroide, codigo_municipio, codigo_distrito, nome_distrito, ponto_de_referencia, data_criacao_lote
+
+Falta: lote_id, data_modificacao_lote, situacao_juridica, numero_incra, numero_titulo, cadastro_aprovado, numero_lote
+
+QUIXADA 2153
