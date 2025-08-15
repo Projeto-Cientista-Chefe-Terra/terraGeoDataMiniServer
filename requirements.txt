@@ -30,3 +30,8 @@ unidecode
 APScheduler
 brotli-asgi
 
+
+requests          # Para chamadas HTTP à API
+tenacity           # Para mecanismo de retry
+python-dateutil    # Para manipulação de datas (usado indiretamente)
+typing-extensions  # Para suporte a tipos (Python < 3.10)

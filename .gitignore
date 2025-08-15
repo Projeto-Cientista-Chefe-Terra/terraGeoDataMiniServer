@@ -147,3 +147,7 @@ data/
 
 #config
 config.py
+
+#outros
+para_averiguacao/
+logs/

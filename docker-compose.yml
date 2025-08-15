@@ -45,9 +45,6 @@ services:
       - terra_network
     restart: unless-stopped
 
-    
-
-
   dfundce:
     build:
       context: ../dashboard_fundiario_ceara
@@ -62,7 +59,6 @@ services:
     networks:
       - terra_network
     restart: unless-stopped
-
 
 volumes:
   postgres_data:
