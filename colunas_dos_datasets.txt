@@ -12,8 +12,4 @@ Colunas usadas do IDACE:
 lote_id,nome_municipio,numero_lote,data_criacao_lote,data_modificacao_lote,imovel,situacao_juridica,numero_incra,numero_titulo,cadastro_aprovado,geometry,nome_proprietario
 
 GeoAPI:
-id,municipio,proprietario,cpfcnpj,imovel,multipolygon, centroide, codigo_municipio, codigo_distrito, nome_distrito, ponto_de_referencia, data_criacao_lote
-
-Falta: lote_id, data_modificacao_lote, situacao_juridica, numero_incra, numero_titulo, cadastro_aprovado, numero_lote
-
-QUIXADA 2153
+id,municipio,proprietario,cpfcnpj,imovel,multipolygon, centroide, codigo_municipio, codigo_distrito, nome_distrito, ponto_de_referencia, data_criacao_lote, lote_id, data_modificacao_lote, situacao_juridica, numero_incra, numero_titulo, cadastro_aprovado, numero_lote
