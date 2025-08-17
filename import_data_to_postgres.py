@@ -31,7 +31,7 @@ TABLE_MALHA_FUNDIARIA = "malha_fundiaria_ceara"
 TABLE_MUNICIPIOS = "municipios_ceara"
 
 # paths dos dados
-PATH_CSV_MALHA_FUNDIARIA = "data/dataset-malha-fundiaria-idace_preprocessado-2025-07-08.csv"
+PATH_CSV_MALHA_FUNDIARIA = "data/dataset-malha-fundiaria-idace_preprocessado-2025-08-17.csv" 
 PATH_GEOJSON_MUNICIPIOS = "data/geojson-municipios_ceara-normalizado.geojson"
 
 
@@ -53,7 +53,7 @@ def import_malha_fundiaria(csv_path: str, engine=None):
     df = pd.read_csv(csv_path, low_memory=False)
 
     # 2) Verifica colunas obrigatórias
-    obrigatorias = ["modulo_fiscal", "area", "geom", "nome_municipio", "regiao_administrativa"]
+    obrigatorias = ["modulo_fiscal", "area", "geom", "nome_municipio", "nome_proprietario","regiao_administrativa"]
     faltantes = [c for c in obrigatorias if c not in df.columns]
     if faltantes:
         logger.error("Colunas faltantes: %s", faltantes)
