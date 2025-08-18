@@ -140,7 +140,11 @@ __pycache__/
 
 # Data
 data/
+<<<<<<< HEAD
 datasets/
+=======
+dataset/
+>>>>>>> main
 *.sqlite
 *.sql
 *.csv
@@ -152,5 +156,15 @@ logs/
 
 #config
 config.py
+<<<<<<< HEAD
 test_geoapi.py
 colunas_dos_datasets.txt
+=======
+colunas_dos_datasets.txt
+
+# Logs da aplicação
+logs/
+*.log
+para_averiguacao/
+
+>>>>>>> main
