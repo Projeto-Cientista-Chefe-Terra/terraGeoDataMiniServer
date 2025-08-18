@@ -105,7 +105,7 @@ def _geom_sql(
     return f"ST_AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
 
 # ==================== Listagem de Regiões e Municípios ====================
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=32)
 def fetch_regioes() -> List[str]:
     """Retorna todas as regiões administrativas."""
     sql = f"""
