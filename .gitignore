@@ -140,6 +140,7 @@ __pycache__/
 
 # Data
 data/
+dataset/
 *.sqlite
 *.sql
 *.csv
@@ -147,3 +148,10 @@ data/
 
 #config
 config.py
+colunas_dos_datasets.txt
+
+# Logs da aplicação
+logs/
+*.log
+para_averiguacao/
+
