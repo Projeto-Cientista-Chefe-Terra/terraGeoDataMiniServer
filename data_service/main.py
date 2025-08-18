@@ -75,7 +75,7 @@ app.add_middleware(BrotliMiddleware, quality=5)
 # ==================== Constantes ====================
 COMMON_PROPERTY_COLUMNS = [
     "numero_lote", "numero_incra", "situacao_juridica",
-    "modulo_fiscal", "area", "nome_municipio",
+    "modulo_fiscal", "area", "nome_municipio", "nome_proprietario",
     "regiao_administrativa", "categoria", "nome_municipio_original","imovel","data_criacao_lote"
     ]
 
@@ -366,6 +366,7 @@ def geojson_assentamentos(
         "nome_municipio", 
         "nome_assentamento", 
         "nome_municipio_original", 
+        "nome_proprietario",
         "area", 
         "perimetro", 
         "tipo_assentamento", 
@@ -422,6 +423,7 @@ def geojson_assentamentos(
                     "nome_municipio": row.get('nome_municipio'),
                     "nome_assentamento": row.get('nome_assentamento'),
                     "nome_municipio_original": row.get('nome_municipio_original'),
+                    "nome_proprietario": row.get('nome_proprietario'),
                     "area": row.get('area'),
                     "perimetro": row.get('perimetro'),
                     "forma_obtecao": row.get('forma_obtecao'),
