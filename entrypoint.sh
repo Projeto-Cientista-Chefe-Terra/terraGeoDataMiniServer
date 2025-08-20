@@ -30,9 +30,23 @@ fi
 echo "▶ Executando Terra Geodata Mini-Server..."
 
 echo "🚀  Iniciando Gunicorn..."
+
+# caminhos no container (monte via volume/secret)
+: "${SSL_CERT_FILE:=/run/certs/fullchain.pem}"
+: "${SSL_KEY_FILE:=/run/certs/privkey.pem}"
+
 exec gunicorn data_service.main:app \
-     --worker-class uvicorn.workers.UvicornWorker \
-     --bind 0.0.0.0:8000 \
-     --workers "${GUNICORN_WORKERS}" \
-     --threads "${GUNICORN_THREADS}" \
-     --log-level "${GUNICORN_LOG_LEVEL}"
+  --worker-class uvicorn.workers.UvicornWorker \
+  --bind 0.0.0.0:8000 \
+  --workers "${GUNICORN_WORKERS:-2}" \
+  --threads "${GUNICORN_THREADS:-2}" \
+  --log-level "${GUNICORN_LOG_LEVEL:-info}" \
+  --certfile "$SSL_CERT_FILE" \
+  --keyfile "$SSL_KEY_FILE"
+
+# exec gunicorn data_service.main:app \
+#      --worker-class uvicorn.workers.UvicornWorker \
+#      --bind 0.0.0.0:8000 \
+#      --workers "${GUNICORN_WORKERS}" \
+#      --threads "${GUNICORN_THREADS}" \
+#      --log-level "${GUNICORN_LOG_LEVEL}"

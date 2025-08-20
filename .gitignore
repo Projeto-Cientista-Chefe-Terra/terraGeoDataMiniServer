@@ -161,6 +161,7 @@ test_geoapi.py
 colunas_dos_datasets.txt
 =======
 colunas_dos_datasets.txt
+*.json
 
 # Logs da aplicação
 logs/
