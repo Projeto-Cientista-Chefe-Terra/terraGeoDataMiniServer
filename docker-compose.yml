@@ -40,9 +40,9 @@ services:
       - POSTGRES_PASSWORD=Asdsee;30
       - POSTGRES_DB=geodata
     ports:
-      - "443:8000" # modificado para HTTPS
-    volumes:
-      - ./certs:/run/certs:ro  # inserido volume para certificados
+      - "8000:8000"
+    # volumes:
+    #   - ./certs:/run/certs:ro  # inserido volume para certificados
     networks:
       - terra_network
     restart: unless-stopped
@@ -55,10 +55,10 @@ services:
     container_name: dashboard_fundiario_ce
     environment:
       - TZ=America/Fortaleza
-      #- DATA_SERVICE_URL=http://tgdmserver:8000
-      - DATA_SERVICE_URL=https://tgdmserver.virtual.ufc.br:8000
+      - DATA_SERVICE_URL=http://tgdmserver:8000
+      # - DATA_SERVICE_URL=https://tgdmserver.virtual.ufc.br:8000
     ports:
-      - "8501:80"
+      - "8501:8501"
     networks:
       - terra_network
     restart: unless-stopped
