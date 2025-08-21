@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     TABLE_DADOS_FUNDIARIOS: str = "malha_fundiaria_ceara"
     TABLE_DADOS_ASSENTAMENTOS: str = "assentamentos_ceara"
     TABLE_DADOS_RESERVATORIOS: str = "reseratorios_ceara"
+    TABLE_TEMPORARY: str = "temp_table"
+    TABLE_RA_MUNICIPIOS_MF_CE: str = "regioes_administrativas_municipios_malha_fundiaria_ceara"
+    
+    # Token de acesso à GeoAPI
+    TOKEN_GEOAPI: str = ""
+    
 
     # Configurações de CORS
     ALLOWED_ORIGINS: List[str] = ["*"]

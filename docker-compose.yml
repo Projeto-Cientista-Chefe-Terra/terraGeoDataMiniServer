@@ -41,12 +41,11 @@ services:
       - POSTGRES_DB=geodata
     ports:
       - "8000:8000"
+    # volumes:
+    #   - ./certs:/run/certs:ro  # inserido volume para certificados
     networks:
       - terra_network
     restart: unless-stopped
-
-    
-
 
   dfundce:
     build:
@@ -57,16 +56,17 @@ services:
     environment:
       - TZ=America/Fortaleza
       - DATA_SERVICE_URL=http://tgdmserver:8000
+      # - DATA_SERVICE_URL=https://tgdmserver.virtual.ufc.br:8000
     ports:
       - "8501:8501"
     networks:
       - terra_network
     restart: unless-stopped
 
-
 volumes:
   postgres_data:
   tgdmserver:
+
 
 networks:
   terra_network:
