@@ -11,13 +11,17 @@ import config
 # Configuração de logging
 log_filename = datetime.now().strftime("logs/importer_csv_rm_mun_mf_%Y_%m_%d_%H_%M.log")
 os.makedirs("logs", exist_ok=True)
+
 logging.basicConfig(
-    filename=log_filename,
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(log_filename, encoding="utf-8"),
+        logging.StreamHandler()  # <- imprime na tela
+    ],
+    # force=True  # descomente se o script for importado/rodado mais de uma vez na mesma sessão
 )
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Configurações
 settings = config.settings

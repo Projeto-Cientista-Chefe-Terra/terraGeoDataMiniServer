@@ -18,9 +18,6 @@ if [ "${DATABASE_TYPE:-postgres}" == "sqlite" ] && [ ! -d "$(dirname "${SQLITE_P
     mkdir -p "$(dirname "${SQLITE_PATH:-data/geodata.sqlite}")"
 fi
 
-echo "▶ Carregando dados para o banco de dados..."
-python import_data_to_postgres_neo.py
-
 # echo "▶ Carregando dados para o banco de dados..."
 # python import_data_to_postgres.py
 
@@ -30,16 +27,37 @@ python import_data_to_postgres_neo.py
 # echo "▶ Carregando dados dos Reservatórios para o banco de dados..."
 # python import_data_reservatorios_to_postgres.py
 
+# Importers de dados 
+echo "▶ Carregando dados da malha fundiária do Ceará para o banco de dados..."
+python importer_malha_fundiaria_ceara.py
+
+echo "▶ Carregando dados de municípios, regiões administrativas e módulos fiscais para o banco de dados..."
+python importer_regioes_adm_municipios_mf.py
+
+echo "▶ Carregando dados dos Reservatórios Monitorados para o banco de dados..."
+python importer_reservatorios_monitorados.py
+
+echo "▶ Carregando dados dos Assentamentos do Ceará para o banco de dados..."
+python importer_assentamentos.py
+
+echo "▶ Carregando dados dos municípios do Ceará para o banco de dados..."
+python importer_municipios_ceara.py
+
+
+
+
+
+
 # Remove pastas não necessárias
 if [ -d "data" ]; then
     echo "▶ Removendo pasta 'data'..."
     rm -rf data
 fi
 
-if [ -d "datasets" ]; then
-    echo "▶ Removendo pasta 'data'..."
-    rm -rf datasets
-fi
+# if [ -d "datasets" ]; then
+#     echo "▶ Removendo pasta 'datasets'..."
+#     rm -rf datasets
+# fi
 
 echo "▶ Executando Terra Geodata Mini-Server..."
 
@@ -58,9 +76,18 @@ echo "🚀  Iniciando Gunicorn..."
 #   --certfile "$SSL_CERT_FILE" \
 #   --keyfile "$SSL_KEY_FILE"
 
+# Inicia o servidor SSH em segundo plano
+echo "🚀  Iniciando servidor SSH..."
+exec /usr/sbin/sshd -D &
+
+
+
 exec gunicorn data_service.main:app \
      --worker-class uvicorn.workers.UvicornWorker \
-     --bind 0.0.0.0:8000 \
+     --bind ${TGDMSERVER_HOST}:${TGDMSERVER_PORT} \
      --workers "${GUNICORN_WORKERS}" \
      --threads "${GUNICORN_THREADS}" \
      --log-level "${GUNICORN_LOG_LEVEL}"
+
+
+
