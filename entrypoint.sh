@@ -28,22 +28,23 @@ fi
 # python import_data_reservatorios_to_postgres.py
 
 # Importers de dados 
-echo "▶ Carregando dados da malha fundiária do Ceará para o banco de dados..."
-python importer_malha_fundiaria_ceara.py
+# echo "▶ Carregando dados da malha fundiária do Ceará para o banco de dados..."
+# python importer_malha_fundiaria_ceara.py
 
-echo "▶ Carregando dados de municípios, regiões administrativas e módulos fiscais para o banco de dados..."
-python importer_regioes_adm_municipios_mf.py
+# echo "▶ Carregando dados de municípios, regiões administrativas e módulos fiscais para o banco de dados..."
+# python importer_regioes_adm_municipios_mf.py
 
-echo "▶ Carregando dados dos Reservatórios Monitorados para o banco de dados..."
-python importer_reservatorios_monitorados.py
+# echo "▶ Carregando dados dos Reservatórios Monitorados para o banco de dados..."
+# python importer_reservatorios_monitorados.py
 
-echo "▶ Carregando dados dos Assentamentos do Ceará para o banco de dados..."
-python importer_assentamentos.py
+# echo "▶ Carregando dados dos Assentamentos do Ceará para o banco de dados..."
+# python importer_assentamentos.py
 
-echo "▶ Carregando dados dos municípios do Ceará para o banco de dados..."
-python importer_municipios_ceara.py
+# echo "▶ Carregando dados dos municípios do Ceará para o banco de dados..."
+# python importer_municipios_ceara.py
 
-
+echo "▶ Carregando dados para o banco de dados..."
+python importer_all.py
 
 
 
@@ -62,24 +63,6 @@ fi
 echo "▶ Executando Terra Geodata Mini-Server..."
 
 echo "🚀  Iniciando Gunicorn..."
-
-# # caminhos no container (monte via volume/secret)
-# : "${SSL_CERT_FILE:=/run/certs/fullchain.pem}"
-# : "${SSL_KEY_FILE:=/run/certs/privkey.pem}"
-
-# exec gunicorn data_service.main:app \
-#   --worker-class uvicorn.workers.UvicornWorker \
-#   --bind 0.0.0.0:8000 \
-#   --workers "${GUNICORN_WORKERS:-2}" \
-#   --threads "${GUNICORN_THREADS:-2}" \
-#   --log-level "${GUNICORN_LOG_LEVEL:-info}" \
-#   --certfile "$SSL_CERT_FILE" \
-#   --keyfile "$SSL_KEY_FILE"
-
-# Inicia o servidor SSH em segundo plano
-echo "🚀  Iniciando servidor SSH..."
-exec /usr/sbin/sshd -D &
-
 
 
 exec gunicorn data_service.main:app \
