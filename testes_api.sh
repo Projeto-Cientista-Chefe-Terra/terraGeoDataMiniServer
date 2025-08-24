@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configurações
-API_BASE="http://localhost:8000"
+API_BASE="http://localhost:9442"
 REGIAO_ESPECIFICA="CARIRI"
 
 # Cores para feedback visual
