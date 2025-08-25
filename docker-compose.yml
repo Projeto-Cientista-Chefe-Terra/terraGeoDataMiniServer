@@ -55,7 +55,7 @@ services:
     container_name: dashboard_fundiario_ce
     environment:
       - TZ=America/Fortaleza
-      - DATA_SERVICE_URL=http://tgdmserver.virtual.ufc.br:8000
+      - DATA_SERVICE_URL=http://tgdmserver:8000 # http://tgdmserver.virtual.ufc.br:8000
     ports:
       - "8501:8501"
     networks:
