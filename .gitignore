@@ -162,6 +162,7 @@ colunas_dos_datasets.txt
 =======
 colunas_dos_datasets.txt
 *.json
+jwt_secret.key
 
 # Logs da aplicação
 logs/
