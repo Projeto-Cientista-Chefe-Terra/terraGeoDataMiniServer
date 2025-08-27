@@ -24,6 +24,12 @@ from typing import Optional
 from geoalchemy2.functions import ST_AsGeoJSON, ST_Transform
 
 
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt
+from datetime import datetime, timedelta
+
+
 # ==================== Configuração de Logs ====================
 logger = logging.getLogger("uvicorn")
 logger.setLevel(logging.INFO)
@@ -33,6 +39,41 @@ formatter = jsonlogger.JsonFormatter(
 )
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
+
+
+
+# =================== Esquema de Autenticação JWT ===================
+security = HTTPBearer()
+
+def create_jwt_token() -> str:
+    expiration = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
+    payload = {
+        "exp": expiration,
+        "iat": datetime.utcnow(),
+        "sub": "streamlit_app"
+    }
+    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(
+            credentials.credentials, 
+            settings.JWT_SECRET, 
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expirado"
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token inválido"
+        )
+
 
 # ==================== Ciclo de Vida da Aplicação ====================
 @asynccontextmanager
@@ -106,7 +147,7 @@ def _geom_sql(
 
 # ==================== Listagem de Regiões e Municípios ====================
 @lru_cache(maxsize=32)
-def fetch_regioes() -> List[str]:
+def fetch_regioes(_: dict = Depends(verify_token)) -> List[str]:
     """Retorna todas as regiões administrativas."""
     sql = f"""
         SELECT DISTINCT regiao_administrativa
@@ -119,7 +160,7 @@ def fetch_regioes() -> List[str]:
     return [r['regiao_administrativa'] for r in rows]
 
 @lru_cache(maxsize=32)
-def fetch_municipios(regiao: str) -> List[str]:
+def fetch_municipios(regiao: str,_: dict = Depends(verify_token)) -> List[str]:
     """Retorna municípios de uma região."""
     where = _ci_equals("regiao_administrativa", "regiao")
     sql = f"""
@@ -140,6 +181,7 @@ def _get_geojson_from_file_or_db(
     where_column: str,
     extra_columns: Optional[List[str]] = None,
     tolerance: Optional[float] = None,
+    _: dict = Depends(verify_token),
     decimals: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Tenta ler arquivo pré-processado ou consulta o banco."""
@@ -212,12 +254,12 @@ def health_check():
     return {"status": "healthy"}
 
 @app.get("/regioes")
-def listar_regioes():
+def listar_regioes(_: dict = Depends(verify_token)):
     """Lista todas as regiões."""
     return {"regioes": fetch_regioes()}
 
 @app.get("/municipios")
-def listar_municipios(regiao: str = Query(..., description="Região case-insensitive.")):
+def listar_municipios(regiao: str = Query(..., description="Região case-insensitive."),_: dict = Depends(verify_token)):
     """Lista municípios de uma região."""
     munis = fetch_municipios(regiao)
     if not munis:
@@ -225,7 +267,7 @@ def listar_municipios(regiao: str = Query(..., description="Região case-insensi
     return {"municipios": munis}
 
 @app.get("/municipios_todos")
-def listar_todos_municipios():
+def listar_todos_municipios(_: dict = Depends(verify_token)):
     """Lista todos municípios."""
     sql = f"""
         SELECT DISTINCT nome_municipio
@@ -256,7 +298,7 @@ def listar_todos_municipios():
 #     return {"type": "FeatureCollection", "features": features}
 
 @app.get("/geojson_muni")
-def geojson_muni(municipio: str = Query(..., description="Município case-insensitive ou 'todos' para retornar todos os municípios.")):
+def geojson_muni(municipio: str = Query(..., description="Município case-insensitive ou 'todos' para retornar todos os municípios."),_: dict = Depends(verify_token)):
     """GeoJSON de município(s). Retorna todos se município='todos'."""
     geom_expr = _geom_sql()
     
@@ -303,7 +345,7 @@ def geojson(
     municipio: str = Query(None),
     tolerance: Optional[float] = Query(None, description="Tolerância de simplificação da geometria (opcional)"),
     decimals: Optional[int] = Query(None, description="Número de casas decimais na geometria (opcional)"),
-    # limit: int = Query(1000)
+    _: dict = Depends(verify_token)
 ):
     """GeoJSON de região ou município."""
     if bool(regiao) == bool(municipio):
@@ -329,7 +371,8 @@ def geojson(
 @app.get("/dados_fundiarios")
 def dados_fundiarios(
     regiao: str = Query(None),
-    municipio: str = Query(None)
+    municipio: str = Query(None),
+    _: dict = Depends(verify_token)
 ):
     """Dados tabulares (sem geometria)."""
     if bool(regiao) == bool(municipio):
@@ -355,6 +398,7 @@ def geojson_assentamentos(
     municipio: str = Query("todos", description="Filtrar por município ('todos' para todos os municípios)"),
     tolerance: Optional[float] = Query(None, description="Tolerância de simplificação da geometria (opcional)"),
     decimals: Optional[int] = Query(None, description="Número de casas decimais na geometria (opcional)"),
+    _: dict = Depends(verify_token)
 ):
     """
     Retorna todos os assentamentos estaduais do Ceará em formato GeoJSON.
@@ -469,7 +513,7 @@ def row_to_feature(row):
         return None
 
 @app.get("/assentamentos_municipios")
-def listar_municipios_assentamentos():
+def listar_municipios_assentamentos(_: dict = Depends(verify_token)):
     """Lista todos os municípios que possuem assentamentos estaduais."""
     sql = f"""
         SELECT DISTINCT nome_municipio
@@ -486,6 +530,7 @@ def geojson_reservatorios(
     municipio: str = Query("todos", description="Filtrar por município ('todos' pra geral)"),
     tolerance: Optional[float] = Query(0.001, description="Tolerância de simplificação (opc.)"),
     decimals: Optional[int] = Query(4, description="Casas decimais na geometria (opc.)"),
+    _: dict = Depends(verify_token)
 ):
     """
     Retorna reservatórios em GeoJSON, usando o WKT em `wkt_geom`.
@@ -555,7 +600,7 @@ def geojson_reservatorios(
     }
 
 @app.get("/reservatorios_municipios")
-def listar_municipios_reservatorios():
+def listar_municipios_reservatorios(_: dict = Depends(verify_token)):
     """Lista municípios que têm reservatórios (coluna nome_municipio)."""
     sql = f"""
       SELECT DISTINCT nome_municipio
