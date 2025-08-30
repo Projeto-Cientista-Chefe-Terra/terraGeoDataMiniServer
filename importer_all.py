@@ -121,7 +121,7 @@ def table_exists(table_name):
         logger.error(f"Erro ao verificar existência da tabela {table_name}: {e}")
         return False
 
-def should_import_data(table_name, hours=24):
+def should_import_data(table_name, hours=48):
     """Determina se os dados devem ser importados com base na existência da tabela e dados recentes"""
     if not table_exists(table_name):
         logger.info(f"Tabela {table_name} não existe. Importação necessária.")
