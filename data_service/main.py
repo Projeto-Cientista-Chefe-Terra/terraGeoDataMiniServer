@@ -1,34 +1,23 @@
 # data_service/main.py
 
-import os
 import json
 import logging
 from typing import List, Dict, Any, Optional
-from multiprocessing import Pool, cpu_count
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from brotli_asgi import BrotliMiddleware
-from apscheduler.schedulers.background import BackgroundScheduler
 from pythonjsonlogger import jsonlogger
 from sqlalchemy import text
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import jwt
+from functools import lru_cache
 
 from config import settings, DatabaseType
 from .db import get_sqlalchemy_engine
 from .utils import row_to_feature
-from functools import lru_cache
-
-from typing import Optional
-from geoalchemy2.functions import ST_AsGeoJSON, ST_Transform
-
-
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import jwt
-from datetime import datetime, timedelta
-
 
 # ==================== Configuração de Logs ====================
 logger = logging.getLogger("uvicorn")
@@ -40,20 +29,8 @@ formatter = jsonlogger.JsonFormatter(
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-
-
-
 # =================== Esquema de Autenticação JWT ===================
 security = HTTPBearer()
-
-def create_jwt_token() -> str:
-    expiration = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
-    payload = {
-        "exp": expiration,
-        "iat": datetime.utcnow(),
-        "sub": "streamlit_app"
-    }
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
@@ -74,8 +51,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
             detail="Token inválido"
         )
 
-
-# ==================== Ciclo de Vida da Aplicação ====================
+# ==================== Ciclo de Vida ====================
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Iniciando aplicação...")
@@ -86,35 +62,8 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ Falha ao conectar ao banco de dados: {e}")
         raise
-
-    scheduler = BackgroundScheduler()
-    
-    # MODIFICADO: Horário fixo de 8:00 PM (20:00)
-    scheduler.add_job(
-        preprocess_geojson, 
-        'cron',
-        hour=20,
-        minute=0,
-        id="daily_preprocess_job"
-    )
-    
-    # ADIÇÃO: Executa o pré-processamento uma vez, 10s após a inicialização,
-    # para garantir que o cache exista. Você pode remover isto se não quiser.
-    scheduler.add_job(
-        preprocess_geojson,
-        'date',
-        run_date=datetime.now() + timedelta(seconds=10),
-        id="initial_preprocess_job"
-    )
-    
-    scheduler.start()
-    logger.info("Agendador de pré-processamento configurado. Próxima execução: 20:00 (diário) e uma vez na inicialização.")
-
     yield
-
     logger.info("Encerrando aplicação...")
-    scheduler.shutdown()
-    get_engine().dispose()
 
 # ==================== App FastAPI ====================
 app = FastAPI(
@@ -133,9 +82,10 @@ app.add_middleware(BrotliMiddleware, quality=5)
 # ==================== Constantes ====================
 COMMON_PROPERTY_COLUMNS = [
     "numero_lote", "numero_incra", "situacao_juridica",
-    "modulo_fiscal", "area", "nome_municipio","nome_proprietario","nome_distrito","numero_titulo",
-    "regiao_administrativa", "categoria", "nome_municipio_original","imovel","data_criacao_lote"
-    ]
+    "modulo_fiscal", "area", "nome_municipio", "nome_proprietario", 
+    "nome_distrito", "numero_titulo", "regiao_administrativa", 
+    "categoria", "nome_municipio_original", "imovel", "data_criacao_lote"
+]
 
 # ==================== Helpers de Engine e SQL ====================
 @lru_cache()
@@ -148,25 +98,19 @@ def _ci_equals(column: str, param: str = "param") -> str:
         return f"LOWER({column}) = LOWER(:{param})"
     return f"{column} ILIKE :{param}"
 
-def _geom_sql(
-    tolerance: Optional[float] = None,
-    decimals: Optional[int] = None
-) -> str:
-    """
-    Expressão SQL para GeoJSON simplificado.
-    Usa settings.GEOMETRY_TOLERANCE e settings.GEOMETRY_DECIMALS por padrão.
-    """
+def _geom_sql(tolerance: Optional[float] = None, decimals: Optional[int] = None) -> str:
+    """Expressão SQL para GeoJSON simplificado."""
     tol = tolerance if tolerance is not None else settings.GEOMETRY_TOLERANCE
     dec = decimals if decimals is not None else settings.GEOMETRY_DECIMALS
+    
     if settings.DATABASE_TYPE == DatabaseType.SQLITE:
         return f"AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
     return f"ST_AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
 
-# ==================== Funções Internas (Lógica Pura) ====================
-# (NOVAS FUNÇÕES - Sem Depends, Sem cache, para uso interno e do agendador)
-
-def _internal_fetch_regioes() -> List[str]:
-    """(INTERNO) Retorna todas as regiões administrativas."""
+# ==================== Funções Principais  ====================
+@lru_cache(maxsize=32)
+def fetch_regioes(_: dict = Depends(verify_token)) -> List[str]:
+    """Retorna todas as regiões administrativas."""
     sql = f"""
         SELECT DISTINCT regiao_administrativa
         FROM {settings.TABLE_DADOS_FUNDIARIOS}
@@ -177,8 +121,9 @@ def _internal_fetch_regioes() -> List[str]:
         rows = conn.execute(text(sql)).mappings().all()
     return [r['regiao_administrativa'] for r in rows]
 
-def _internal_fetch_municipios(regiao: str) -> List[str]:
-    """(INTERNO) Retorna municípios de uma região."""
+@lru_cache(maxsize=32)
+def fetch_municipios(regiao: str, _: dict = Depends(verify_token)) -> List[str]:
+    """Retorna municípios de uma região."""
     where = _ci_equals("regiao_administrativa", "regiao")
     sql = f"""
         SELECT DISTINCT nome_municipio
@@ -190,23 +135,7 @@ def _internal_fetch_municipios(regiao: str) -> List[str]:
         rows = conn.execute(text(sql), {"regiao": regiao}).mappings().all()
     return [r['nome_municipio'] for r in rows]
 
-# ==================== Listagem de Regiões e Municípios (Endpoints) ====================
-# (FUNÇÕES MODIFICADAS - Mantêm o Depends e o Cache para os endpoints)
-
-@lru_cache(maxsize=32)
-def fetch_regioes(_: dict = Depends(verify_token)) -> List[str]:
-    """Retorna todas as regiões administrativas (com auth e cache)."""
-    # Chama a função interna (sem auth/cache)
-    return _internal_fetch_regioes()
-
-@lru_cache(maxsize=32)
-def fetch_municipios(regiao: str,_: dict = Depends(verify_token)) -> List[str]:
-    """Retorna municípios de uma região (com auth e cache)."""
-    # Chama a função interna (sem auth/cache)
-    return _internal_fetch_municipios(regiao)
-
-# ==================== GeoJSON Genérico ====================
-def _get_geojson_from_file_or_db(
+def _get_geojson(
     entity_type: str,
     entity_name: str,
     table: str,
@@ -216,89 +145,25 @@ def _get_geojson_from_file_or_db(
     _: dict = Depends(verify_token),
     decimals: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Tenta ler arquivo pré-processado ou consulta o banco."""
-    file_path = f"cache/geodata/{entity_type}_{entity_name}.geojson"
-    if os.path.isfile(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
+    """Consulta o banco de dados e retorna GeoJSON."""
     cols = extra_columns or []
     props = ", ".join(f'"{c}"' for c in cols)
     geom = _geom_sql(tolerance=tolerance, decimals=decimals)
+    
     sql = f"""
         SELECT {geom} AS geom_json, {props}
         FROM {table}
         WHERE {_ci_equals(where_column, 'param')}
     """
+    
     with get_engine().connect() as conn:
         rows = conn.execute(text(sql), {"param": entity_name}).mappings().all()
+    
     features = [row_to_feature(r) for r in rows if r.get('geom_json')]
     if not features:
         raise HTTPException(404, f"Nenhuma geometria para {entity_type} '{entity_name}'")
-    return {"type": "FeatureCollection", "features": features}
-
-# ==================== Pré-processamento ====================
-def _preprocess_municipio(muni: str):
-    """Gera e salva GeoJSON de município."""
-    sql = (
-        f"SELECT {_geom_sql()} AS geom_json, \"nm_mun\" AS nome_municipio "
-        f"FROM {settings.TABLE_GEOM_MUNICIPIOS} "
-        f"WHERE {_ci_equals('nm_mun', 'muni')}"
-    )
-    with get_engine().connect() as conn:
-        rows = conn.execute(text(sql), {"muni": muni}).mappings().all()
-    features = [row_to_feature(r) for r in rows if r.get('geom_json')]
-    os.makedirs("cache/geodata", exist_ok=True)
-    with open(f"cache/geodata/municipio_{muni}.geojson", "w", encoding="utf-8") as f:
-        json.dump({"type": "FeatureCollection", "features": features}, f)
-
-def _preprocess_regiao(reg: str):
-    """Gera e salva GeoJSON de região."""
-    cols = ", ".join(f'"{c}"' for c in COMMON_PROPERTY_COLUMNS)
-    sql = (
-        f"SELECT {_geom_sql()} AS geom_json, {cols} "
-        f"FROM {settings.TABLE_DADOS_FUNDIARIOS} "
-        f"WHERE {_ci_equals('regiao_administrativa', 'param')}"
-    )
-    with get_engine().connect() as conn:
-        rows = conn.execute(text(sql), {"param": reg}).mappings().all()
-    features = [row_to_feature(r) for r in rows if r.get('geom_json')]
-    os.makedirs("cache/geodata", exist_ok=True)
-    with open(f"cache/geodata/regiao_{reg}.geojson", "w", encoding="utf-8") as f:
-        json.dump({"type": "FeatureCollection", "features": features}, f)
-
-def preprocess_geojson():
-    """Dispara pré-processamento paralelo."""
-    logger.info("INICIANDO JOB: Pré-processamento do GeoJSON...")
     
-    try:
-        # MODIFICADO: Usa as funções internas (sem Depends)
-        regioes_list = _internal_fetch_regioes()
-        logger.info(f"[Pre-processamento] Encontradas {len(regioes_list)} regiões.")
-
-        muni_list = []
-        for reg in regioes_list:
-            muni_list.extend(_internal_fetch_municipios(reg))
-        
-        muni_set = set(muni_list)
-        logger.info(f"[Pre-processamento] Encontrados {len(muni_set)} municípios únicos.")
-        
-        # Cria o diretório se não existir (embora _preprocess_* também faça isso)
-        os.makedirs("cache/geodata", exist_ok=True)
-
-        with Pool(cpu_count()) as pool:
-            logger.info("Iniciando pool de processamento de municípios...")
-            pool.map(_preprocess_municipio, muni_set)
-        
-        with Pool(cpu_count()) as pool:
-            logger.info("Iniciando pool de processamento de regiões...")
-            pool.map(_preprocess_regiao, regioes_list)
-        
-        logger.info("JOB CONCLUÍDO: Pré-processamento do GeoJSON finalizado.")
-
-    except Exception as e:
-        # Loga qualquer erro que aconteça durante o job de fundo
-        logger.error(f"ERRO NO JOB de pré-processamento: {e}", exc_info=True)
+    return {"type": "FeatureCollection", "features": features}
 
 # ==================== Endpoints ====================
 @app.get("/health")
@@ -314,7 +179,10 @@ def listar_regioes(_: dict = Depends(verify_token)):
     return {"regioes": fetch_regioes()}
 
 @app.get("/municipios")
-def listar_municipios(regiao: str = Query(..., description="Região case-insensitive."),_: dict = Depends(verify_token)):
+def listar_municipios(
+    regiao: str = Query(..., description="Região case-insensitive."),
+    _: dict = Depends(verify_token)
+):
     """Lista municípios de uma região."""
     munis = fetch_municipios(regiao)
     if not munis:
@@ -334,9 +202,11 @@ def listar_todos_municipios(_: dict = Depends(verify_token)):
         rows = conn.execute(text(sql)).fetchall()
     return {"municipios": [r[0] for r in rows]}
 
-
 @app.get("/geojson_muni")
-def geojson_muni(municipio: str = Query(..., description="Município case-insensitive ou 'todos' para retornar todos os municípios."),_: dict = Depends(verify_token)):
+def geojson_muni(
+    municipio: str = Query(..., description="Município case-insensitive ou 'todos' para retornar todos os municípios."),
+    _: dict = Depends(verify_token)
+):
     """GeoJSON de município(s). Retorna todos se município='todos'."""
     geom_expr = _geom_sql()
     
@@ -389,7 +259,7 @@ def geojson(
     if bool(regiao) == bool(municipio):
         raise HTTPException(400, "Informe 'regiao' OU 'municipio'.")
     if regiao:
-        return _get_geojson_from_file_or_db(
+        return _get_geojson(  # CORREÇÃO AQUI: usar _get_geojson em vez de _get_geojson_from_file_or_db
             "regiao", regiao,
             settings.TABLE_DADOS_FUNDIARIOS,
             'regiao_administrativa',
@@ -397,7 +267,7 @@ def geojson(
             tolerance=tolerance,
             decimals=decimals
         )
-    return _get_geojson_from_file_or_db(
+    return _get_geojson(  # CORREÇÃO AQUI: usar _get_geojson em vez de _get_geojson_from_file_or_db
         "municipio", municipio,
         settings.TABLE_DADOS_FUNDIARIOS,
         'nome_municipio',
@@ -430,7 +300,6 @@ def dados_fundiarios(
         raise HTTPException(404, "Nenhum dado encontrado.")
     return [dict(zip(COMMON_PROPERTY_COLUMNS[:-1], r)) for r in rows]
 
-
 @app.get("/geojson_assentamentos")
 def geojson_assentamentos(
     municipio: str = Query("todos", description="Filtrar por município ('todos' para todos os municípios)"),
@@ -454,7 +323,6 @@ def geojson_assentamentos(
         "forma_obtecao", 
         "num_familias"
     ]
-
 
     cols = ", ".join(f'"{c}"' for c in property_columns)
 
@@ -484,10 +352,8 @@ def geojson_assentamentos(
         with get_engine().connect() as conn:
             rows = conn.execute(text(sql), params).mappings().all()
     except Exception as e:
-        print(f"Erro ao executar a consulta: {e}")
-
-
-
+        logger.error(f"Erro ao executar a consulta: {e}")
+        raise HTTPException(500, "Erro ao consultar assentamentos")
 
     features = []
     for row in rows:
@@ -512,13 +378,15 @@ def geojson_assentamentos(
                 }
             })
         except Exception as e:
-            print(f"Erro ao processar feature: {e}")
+            logger.warning(f"Erro ao processar feature: {e}")
             continue
 
     if not features:
-        raise HTTPException(status_code=404, detail=f"Nenhum assentamento encontrado{f' para {municipio}' if municipio != 'todos' else ''}")
+        raise HTTPException(
+            status_code=404, 
+            detail=f"Nenhum assentamento encontrado{f' para {municipio}' if municipio != 'todos' else ''}"
+        )
     
-
     return {
         "type": "FeatureCollection",
         "features": features,
@@ -528,27 +396,7 @@ def geojson_assentamentos(
                 "name": "urn:ogc:def:crs:EPSG::4326"
             }
         }
-    } 
-
-
-def _ci_equals(column: str, param: str) -> str:
-    return f"LOWER({column}) = LOWER(:{param})"
-
-def row_to_feature(row):
-    """Converte uma linha do banco para uma feature GeoJSON, removendo coordenadas 3D se existirem"""
-    try:
-        geometry = json.loads(row['geom_json'])       
-        return {
-            "type": "Feature",
-            "geometry": geometry,
-            "properties": {
-                k: v for k, v in row.items() 
-                if k != 'geom_json' and v is not None
-            }
-        }
-    except (json.JSONDecodeError, KeyError) as e:
-        print(f"Erro ao processar feature: {e}")
-        return None
+    }
 
 @app.get("/assentamentos_municipios")
 def listar_municipios_assentamentos(_: dict = Depends(verify_token)):

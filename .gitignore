@@ -148,6 +148,7 @@ dataset/
 
 #outros
 para_averiguacao/
+para_apagar/
 logs/
 
 #config
@@ -155,6 +156,7 @@ config.py
 colunas_dos_datasets.txt
 *.json
 jwt_secret.key
+importer_from_geoapi.py
 
 # Logs da aplicação
 logs/
