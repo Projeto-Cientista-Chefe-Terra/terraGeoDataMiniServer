@@ -156,10 +156,6 @@ logs/
 
 #config
 config.py
-<<<<<<< HEAD
-test_geoapi.py
-colunas_dos_datasets.txt
-=======
 colunas_dos_datasets.txt
 *.json
 jwt_secret.key
@@ -169,4 +165,3 @@ logs/
 *.log
 para_averiguacao/
 
->>>>>>> main
