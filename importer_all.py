@@ -1,4 +1,4 @@
-# importers/importer_all.py
+# importer_all.py
 
 import os
 import logging
@@ -127,11 +127,11 @@ def should_import_data(table_name, hours=48):
         logger.info(f"Tabela {table_name} não existe. Importação necessária.")
         return True
     
-    if check_recent_data(table_name, hours):
-        logger.info(f"Dados recentes encontrados em {table_name}. Importação não necessária.")
-        return False
+    # if check_recent_data(table_name, hours):
+    #     logger.info(f"Dados recentes encontrados em {table_name}. Importação não necessária.")
+    #     return False
     
-    logger.info(f"Dados em {table_name} são antigos. Importação necessária.")
+    # logger.info(f"Dados em {table_name} são antigos. Importação necessária.")
     return True
 
 # Importador de Assentamentos

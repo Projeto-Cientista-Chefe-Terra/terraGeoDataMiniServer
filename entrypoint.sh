@@ -50,15 +50,15 @@ python importer_all.py
 
 
 # Remove pastas não necessárias
-if [ -d "data" ]; then
-    echo "▶ Removendo pasta 'data'..."
-    rm -rf data
-fi
-
-# if [ -d "datasets" ]; then
-#     echo "▶ Removendo pasta 'datasets'..."
-#     rm -rf datasets
+# if [ -d "data" ]; then
+#     echo "▶ Removendo pasta 'data'..."
+#     rm -rf data
 # fi
+
+if [ -d "datasets" ]; then
+    echo "▶ Removendo pasta 'datasets'..."
+    rm -rf datasets
+fi
 
 echo "▶ Executando Terra Geodata Mini-Server..."
 
