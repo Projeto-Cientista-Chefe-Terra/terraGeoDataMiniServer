@@ -429,7 +429,7 @@ def import_malha_fundiaria():
                         codigo_distrito, ponto_de_referencia, data_criacao_lote, codigo_municipio,
                         geometry_31984, centroide, data_modificacao_lote, situacao_juridica, numero_incra,
                         numero_titulo, numero_lote, nome_municipio_original, regiao_administrativa,
-                        modulo_fiscal, ehquilombo, ehindigena, ehassentamento,area, categoria,geometry,
+                        modulo_fiscal, area, categoria, geometry, ehquilombo, ehindigena, ehassentamento
                     ) VALUES (
                         :lote_id, :pessoa_id, :nome_municipio, :nome_proprietario, :imovel, :nome_distrito,
                         :codigo_distrito, :ponto_de_referencia, :data_criacao_lote, :codigo_municipio,

@@ -88,27 +88,10 @@ async def lifespan(app: FastAPI):
         raise
 
     scheduler = BackgroundScheduler()
-    
-    # MODIFICADO: Horário fixo de 8:00 PM (20:00)
-    scheduler.add_job(
-        preprocess_geojson, 
-        'cron',
-        hour=20,
-        minute=0,
-        id="daily_preprocess_job"
-    )
-    
-    # ADIÇÃO: Executa o pré-processamento uma vez, 10s após a inicialização,
-    # para garantir que o cache exista. Você pode remover isto se não quiser.
-    scheduler.add_job(
-        preprocess_geojson,
-        'date',
-        run_date=datetime.now() + timedelta(seconds=10),
-        id="initial_preprocess_job"
-    )
-    
+    scheduler.add_job(preprocess_geojson, 'cron',
+                      hour=settings.PREPROCESS_START_HOUR,
+                      minute=settings.PREPROCESS_START_MINUTE)
     scheduler.start()
-    logger.info("Agendador de pré-processamento configurado. Próxima execução: 20:00 (diário) e uma vez na inicialização.")
 
     yield
 
@@ -162,11 +145,10 @@ def _geom_sql(
         return f"AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
     return f"ST_AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
 
-# ==================== Funções Internas (Lógica Pura) ====================
-# (NOVAS FUNÇÕES - Sem Depends, Sem cache, para uso interno e do agendador)
-
-def _internal_fetch_regioes() -> List[str]:
-    """(INTERNO) Retorna todas as regiões administrativas."""
+# ==================== Listagem de Regiões e Municípios ====================
+@lru_cache(maxsize=32)
+def fetch_regioes(_: dict = Depends(verify_token)) -> List[str]:
+    """Retorna todas as regiões administrativas."""
     sql = f"""
         SELECT DISTINCT regiao_administrativa
         FROM {settings.TABLE_DADOS_FUNDIARIOS}
@@ -177,8 +159,9 @@ def _internal_fetch_regioes() -> List[str]:
         rows = conn.execute(text(sql)).mappings().all()
     return [r['regiao_administrativa'] for r in rows]
 
-def _internal_fetch_municipios(regiao: str) -> List[str]:
-    """(INTERNO) Retorna municípios de uma região."""
+@lru_cache(maxsize=32)
+def fetch_municipios(regiao: str,_: dict = Depends(verify_token)) -> List[str]:
+    """Retorna municípios de uma região."""
     where = _ci_equals("regiao_administrativa", "regiao")
     sql = f"""
         SELECT DISTINCT nome_municipio
@@ -189,21 +172,6 @@ def _internal_fetch_municipios(regiao: str) -> List[str]:
     with get_engine().connect() as conn:
         rows = conn.execute(text(sql), {"regiao": regiao}).mappings().all()
     return [r['nome_municipio'] for r in rows]
-
-# ==================== Listagem de Regiões e Municípios (Endpoints) ====================
-# (FUNÇÕES MODIFICADAS - Mantêm o Depends e o Cache para os endpoints)
-
-@lru_cache(maxsize=32)
-def fetch_regioes(_: dict = Depends(verify_token)) -> List[str]:
-    """Retorna todas as regiões administrativas (com auth e cache)."""
-    # Chama a função interna (sem auth/cache)
-    return _internal_fetch_regioes()
-
-@lru_cache(maxsize=32)
-def fetch_municipios(regiao: str,_: dict = Depends(verify_token)) -> List[str]:
-    """Retorna municípios de uma região (com auth e cache)."""
-    # Chama a função interna (sem auth/cache)
-    return _internal_fetch_municipios(regiao)
 
 # ==================== GeoJSON Genérico ====================
 def _get_geojson_from_file_or_db(
@@ -269,36 +237,13 @@ def _preprocess_regiao(reg: str):
 
 def preprocess_geojson():
     """Dispara pré-processamento paralelo."""
-    logger.info("INICIANDO JOB: Pré-processamento do GeoJSON...")
-    
-    try:
-        # MODIFICADO: Usa as funções internas (sem Depends)
-        regioes_list = _internal_fetch_regioes()
-        logger.info(f"[Pre-processamento] Encontradas {len(regioes_list)} regiões.")
-
-        muni_list = []
-        for reg in regioes_list:
-            muni_list.extend(_internal_fetch_municipios(reg))
-        
-        muni_set = set(muni_list)
-        logger.info(f"[Pre-processamento] Encontrados {len(muni_set)} municípios únicos.")
-        
-        # Cria o diretório se não existir (embora _preprocess_* também faça isso)
-        os.makedirs("cache/geodata", exist_ok=True)
-
-        with Pool(cpu_count()) as pool:
-            logger.info("Iniciando pool de processamento de municípios...")
-            pool.map(_preprocess_municipio, muni_set)
-        
-        with Pool(cpu_count()) as pool:
-            logger.info("Iniciando pool de processamento de regiões...")
-            pool.map(_preprocess_regiao, regioes_list)
-        
-        logger.info("JOB CONCLUÍDO: Pré-processamento do GeoJSON finalizado.")
-
-    except Exception as e:
-        # Loga qualquer erro que aconteça durante o job de fundo
-        logger.error(f"ERRO NO JOB de pré-processamento: {e}", exc_info=True)
+    muni_list = []
+    for reg in fetch_regioes():
+        muni_list.extend(fetch_municipios(reg))
+    with Pool(cpu_count()) as pool:
+        pool.map(_preprocess_municipio, set(muni_list))
+    with Pool(cpu_count()) as pool:
+        pool.map(_preprocess_regiao, fetch_regioes())
 
 # ==================== Endpoints ====================
 @app.get("/health")

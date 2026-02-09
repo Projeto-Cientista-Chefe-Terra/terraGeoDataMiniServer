@@ -1,4 +1,4 @@
-# docker-compose.yml do terraGEoDataMiniServer
+# docker-compose.yml do terraGeoDataMiniServer
 
 services:
   postgres:
