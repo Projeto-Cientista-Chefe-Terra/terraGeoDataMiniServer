@@ -140,11 +140,7 @@ __pycache__/
 
 # Data
 data/
-<<<<<<< HEAD
-datasets/
-=======
 dataset/
->>>>>>> main
 *.sqlite
 *.sql
 *.csv
