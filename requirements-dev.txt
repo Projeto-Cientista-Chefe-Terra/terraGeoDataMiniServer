@@ -1,0 +1,16 @@
+# Dependências apenas para desenvolvimento/testes automatizados.
+# Não instalar em produção: pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+
+pytest
+httpx
+
+# stdlib sqlite3 do interpretador do .venv (asdf/python-build) foi compilado
+# sem suporte a "loadable extensions" (Connection.enable_load_extension não
+# existe), o que impede carregar mod_spatialite via sqlite3 padrão. O pacote
+# abaixo fornece um sqlite3 alternativo com esse suporte habilitado, usado
+# somente pelos testes (ver tests/conftest.py) para montar um banco
+# SQLite+SpatiaLite descartável. Ver observação sobre isso no relatório de
+# testes: pode indicar o mesmo problema para quem rodar DATABASE_TYPE=sqlite
+# fora de testes com esse mesmo interpretador.
+pysqlite3-binary
