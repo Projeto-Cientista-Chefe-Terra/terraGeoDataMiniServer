@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     
     
     # Configurações de segurança da API
-    JWT_SECRET: str = "eh_segredo_voce_nao_deve_ler_isto"
+    JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 30
     
