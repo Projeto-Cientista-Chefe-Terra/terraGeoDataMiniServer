@@ -163,3 +163,7 @@ logs/
 *.log
 para_averiguacao/
 
+# Remove arquivos locais
+ .idea/
+ .claude/
+
