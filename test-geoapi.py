@@ -1,10 +1,11 @@
+import os
 import requests
 import json
 
 url = "http://geoapi.idace.ce.gov.br/geoapi/pessoa/municipio/QUIXADA?pagina=0&tamanho=10000&ordenarPor=proprietario"  # QUIXADA
 payload = {}
 headers = {
-    'Authorization': 'Bearer ***TOKEN_GEOAPI_REMOVIDO***'
+    'Authorization': f"Bearer {os.environ['TOKEN_GEOAPI']}"
 }
 
 response = requests.get(url, headers=headers, data=payload)
