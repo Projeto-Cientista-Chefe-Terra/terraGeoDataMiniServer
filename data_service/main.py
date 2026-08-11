@@ -100,13 +100,16 @@ async def lifespan(app: FastAPI):
     
     # ADIÇÃO: Executa o pré-processamento uma vez, 10s após a inicialização,
     # para garantir que o cache exista. Você pode remover isto se não quiser.
-    scheduler.add_job(
-        preprocess_geojson,
-        'date',
-        run_date=datetime.now() + timedelta(seconds=10),
-        id="initial_preprocess_job"
-    )
-    
+    # Desativado para o desenvolvimento local do POC Terra-AI: gera GeoJSON de
+    # 154 municípios via Pool(cpu_count()) e satura CPU/banco por minutos; o
+    # POC não usa nenhum endpoint GeoJSON.
+    # scheduler.add_job(
+    #     preprocess_geojson,
+    #     'date',
+    #     run_date=datetime.now() + timedelta(seconds=10),
+    #     id="initial_preprocess_job"
+    # )
+
     scheduler.start()
     logger.info("Agendador de pré-processamento configurado. Próxima execução: 20:00 (diário) e uma vez na inicialização.")
 
