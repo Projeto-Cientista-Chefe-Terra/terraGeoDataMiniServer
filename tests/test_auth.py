@@ -43,3 +43,28 @@ def test_wrong_auth_scheme_is_rejected(client, valid_token):
     # Esquema "Basic" em vez de "Bearer": HTTPBearer deve recusar.
     resp = client.get("/regioes", headers={"Authorization": f"Basic {valid_token}"})
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Claims aud e iss (obrigatórios desde a versão 1.2.0)
+# ---------------------------------------------------------------------------
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize("claims", [
+    {"aud": None},
+    {"aud": "outro-servico"},
+    {"iss": None},
+    {"iss": "emissor-desconhecido"},
+    {"iat": None},
+])
+def test_token_without_expected_aud_iss_or_iat_is_rejected(client, token_factory, claims):
+    resp = client.get("/regioes", headers={"Authorization": f"Bearer {token_factory(**claims)}"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Token inválido"
+
+
+@pytest.mark.parametrize("emissor", ["dashboard_fundiario_ceara", "terra_ai"])
+def test_known_issuers_are_accepted(client, token_factory, emissor):
+    resp = client.get("/regioes", headers={"Authorization": f"Bearer {token_factory(iss=emissor)}"})
+    assert resp.status_code == 200

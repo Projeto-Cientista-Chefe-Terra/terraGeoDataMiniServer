@@ -1,9 +1,31 @@
+# Segredos e ambientes locais
+.env
+*.env
+.venv/
+.git/
+
+# Caches e saídas locais
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+logs/
+*.log
+$HOME/
+data/
+
+# Não fazem parte do servidor em execução
 .vscode/
-.env
-.git/
-.venv/
 para_apagar/
+tests/
+doc/
+scripts/
+*.in
+test-geoapi.py
+testes_api.sh
+conta-json.py
+all_json_to_csv.py
+colunas_dos_datasets.txt
+otimizacoes.md
+gen_cert.sh

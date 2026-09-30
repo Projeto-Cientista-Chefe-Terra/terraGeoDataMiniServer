@@ -1,8 +1,8 @@
 # config.py
 from enum import Enum
-from typing import List
+from typing import Annotated, List
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 import os
 
 class DatabaseType(str, Enum):
@@ -28,19 +28,29 @@ class Settings(BaseSettings):
     TABLE_DADOS_RESERVATORIOS: str = "reseratorios_ceara"
     TABLE_TEMPORARY: str = "temp_table"
     TABLE_RA_MUNICIPIOS_MF_CE: str = "regioes_administrativas_municipios_malha_fundiaria_ceara"
+    # Registro das cargas concluídas (usado por /versao_dados)
+    TABLE_CARGAS: str = "carga_dados"
     
     # Token de acesso à GeoAPI
     TOKEN_GEOAPI: str = ""
     
 
     # Configurações de CORS
-    ALLOWED_ORIGINS: List[str] = ["*"]
+    ALLOWED_ORIGINS: Annotated[List[str], NoDecode] = ["*"]
     
     
     # Configurações de segurança da API
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 30
+    # Destinatário esperado no claim "aud" e emissores aceitos no claim "iss".
+    JWT_AUDIENCE: str = "terra-geodata-mini-server"
+    # Lista separada por vírgula na variável de ambiente (NoDecode evita a leitura como JSON).
+    JWT_ISSUERS: Annotated[List[str], NoDecode] = ["dashboard_fundiario_ceara", "terra_ai"]
+    # Chave do pseudônimo de proprietário (id_proprietario). Vazia: derivada do JWT_SECRET.
+    PSEUDONIMIZACAO_SECRET: str = ""
+    # Tempo, em segundos, que as listas de regiões e municípios ficam em cache.
+    CACHE_LISTAS_SEGUNDOS: int = 600
     
     # Configurações de performance
 
@@ -68,6 +78,12 @@ class Settings(BaseSettings):
     @property
     def sqlite_dsn(self) -> str:
         return f"sqlite:///{os.path.abspath(self.SQLITE_PATH)}"
+
+    @field_validator("JWT_ISSUERS", mode="before")
+    def parse_jwt_issuers(cls, v):
+        if isinstance(v, str):
+            return [emissor.strip() for emissor in v.split(",") if emissor.strip()]
+        return v
 
     @field_validator("ALLOWED_ORIGINS", mode="before")
     def parse_allowed_origins(cls, v):
