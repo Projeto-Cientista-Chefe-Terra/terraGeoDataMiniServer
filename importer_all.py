@@ -252,6 +252,8 @@ def import_assentamentos():
 
             if records:
                 with engine.begin() as conn:
+                    # Troca a carga inteira na mesma transação: reiniciar o container não duplica dados.
+                    conn.execute(text(f"DELETE FROM {TABLE_NAME}"))
                     insert_query = text(f"""
                         INSERT INTO {TABLE_NAME} (
                             cd_sipra, nome_municipio, nome_municipio_original,
@@ -548,6 +550,8 @@ def import_municipios():
                 return {"municipios": set(), "registros_salvos": 0, "qtd_municipios": 0}
 
             with engine.begin() as conn:
+                # Troca a carga inteira na mesma transação: reiniciar o container não duplica dados.
+                conn.execute(text(f"DELETE FROM {TABLE_NAME}"))
                 insert_sql = text(f"""
                     INSERT INTO {TABLE_NAME} (
                         cd_mun, nm_mun, cd_rgi, nm_rgi, cd_rgint, nm_rgint,
@@ -656,6 +660,8 @@ def import_regioes_adm():
             
             if records:
                 with engine.begin() as conn:
+                    # Troca a carga inteira na mesma transação: reiniciar o container não duplica dados.
+                    conn.execute(text(f"DELETE FROM {TABLE_NAME}"))
                     insert_query = text(f"""
                         INSERT INTO {TABLE_NAME} (regiao_administrativa, nome_municipio, modulo_fiscal)
                         VALUES (:regiao_administrativa, :nome_municipio, :modulo_fiscal)
@@ -801,6 +807,8 @@ def import_reservatorios():
             
             if records:
                 with engine.begin() as conn:
+                    # Troca a carga inteira na mesma transação: reiniciar o container não duplica dados.
+                    conn.execute(text(f"DELETE FROM {TABLE_NAME}"))
                     insert_query = text(f"""
                         INSERT INTO {TABLE_NAME} (
                             wkt_geom, id_sagreh, nome, proprietario, gerencia, reg_hidrog,
@@ -969,6 +977,8 @@ def import_malha_fundiaria():
                 return {"municipios": set(), "registros_salvos": 0, "qtd_municipios": 0}
 
             with engine.begin() as conn:
+                # Troca a carga inteira na mesma transação: reiniciar o container não duplica dados.
+                conn.execute(text(f"DELETE FROM {TABLE_NAME}"))
                 insert_sql = text(f"""
                     INSERT INTO {TABLE_NAME} (
                         lote_id, pessoa_id, nome_municipio, nome_proprietario, imovel, nome_distrito,
@@ -1040,6 +1050,23 @@ def import_malha_fundiaria():
 
 
 # Função principal unificada
+def registrar_carga(tabela, registros):
+    """Registra a conclusão da carga de uma tabela. Alimenta o endpoint /versao_dados."""
+    with engine.begin() as conn:
+        conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {settings.TABLE_CARGAS} (
+                tabela VARCHAR(100) PRIMARY KEY,
+                registros INTEGER,
+                concluida_em TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """))
+        conn.execute(text(f"""
+            INSERT INTO {settings.TABLE_CARGAS} (tabela, registros, concluida_em)
+            VALUES (:tabela, :registros, NOW())
+            ON CONFLICT (tabela) DO UPDATE SET registros = EXCLUDED.registros, concluida_em = NOW()
+        """), {"tabela": tabela, "registros": registros})
+
+
 def main():
     """Função principal que orquestra todas as importações"""
     logger.info("Iniciando importador unificado de dados geoespaciais")
@@ -1055,20 +1082,23 @@ def main():
     
     # Executar todos os importadores
     importers = [
-        ("Municípios", import_municipios),
-        ("Assentamentos", import_assentamentos),
-        ("Regiões Administrativas", import_regioes_adm),
-        ("Reservatórios", import_reservatorios),
-        ("Malha Fundiária", import_malha_fundiaria)
+        ("Municípios", import_municipios, settings.TABLE_GEOM_MUNICIPIOS),
+        ("Assentamentos", import_assentamentos, settings.TABLE_DADOS_ASSENTAMENTOS),
+        ("Regiões Administrativas", import_regioes_adm, settings.TABLE_RA_MUNICIPIOS_MF_CE),
+        ("Reservatórios", import_reservatorios, settings.TABLE_DADOS_RESERVATORIOS),
+        ("Malha Fundiária", import_malha_fundiaria, settings.TABLE_DADOS_FUNDIARIOS)
     ]
     
     results = {}
     
-    for name, importer_func in importers:
+    for name, importer_func, tabela in importers:
         logger.info(f"Processando: {name}")
         try:
             results[name] = importer_func()
             logger.info(f"Concluído: {name} - Status: {results[name].get('status', 'unknown')}")
+            if results[name].get("status") == "success":
+                registros = (results[name].get("stats") or {}).get("registros_salvos")
+                registrar_carga(tabela, registros)
         except Exception as e:
             logger.error(f"Erro inesperado ao processar {name}: {str(e)}")
             results[name] = {"status": "error", "message": str(e)}

@@ -48,7 +48,7 @@ sys.modules["sqlite3.dbapi2"] = _pysqlite3_dbapi2
 # ---------------------------------------------------------------------------
 # 2) Configuração de ambiente de teste (antes de importar `config`)
 # ---------------------------------------------------------------------------
-TEST_JWT_SECRET = "pytest-only-secret-do-not-use-in-prod"
+TEST_JWT_SECRET = "pytest-only-secret-do-not-use-in-prod-0123456789"
 TEST_JWT_ALGORITHM = "HS256"
 
 _TMP_DIR = tempfile.mkdtemp(prefix="tgdm_test_")
@@ -394,8 +394,30 @@ def client(app):
 # ==========================================================================
 # Fixtures de autenticação (JWT)
 # ==========================================================================
+TEST_JWT_AUDIENCE = "terra-geodata-mini-server"
+TEST_JWT_ISSUER = "dashboard_fundiario_ceara"
+
+
 def _make_token(secret: str, algorithm: str, **claims) -> str:
-    return jwt.encode(claims, secret, algorithm=algorithm)
+    """Token com iat, aud e iss padrão. Passe um claim como None para omiti-lo."""
+    from datetime import datetime, timezone
+
+    completos = {"iat": datetime.now(timezone.utc), "aud": TEST_JWT_AUDIENCE, "iss": TEST_JWT_ISSUER}
+    completos.update(claims)
+    return jwt.encode({k: v for k, v in completos.items() if v is not None}, secret, algorithm=algorithm)
+
+
+@pytest.fixture
+def token_factory():
+    """Gera tokens assinados com o segredo de teste: token_factory(iss=..., aud=None, ...)."""
+    from datetime import datetime, timedelta, timezone
+
+    def gerar(**claims):
+        claims.setdefault("sub", "pytest-user")
+        claims.setdefault("exp", datetime.now(timezone.utc) + timedelta(minutes=5))
+        return _make_token(TEST_JWT_SECRET, TEST_JWT_ALGORITHM, **claims)
+
+    return gerar
 
 
 @pytest.fixture
@@ -427,7 +449,7 @@ def wrong_signature_token() -> str:
     from datetime import datetime, timedelta, timezone
 
     return _make_token(
-        "esse-nao-e-o-segredo-certo",
+        "esse-nao-e-o-segredo-certo-mas-tem-mais-de-32-bytes",
         TEST_JWT_ALGORITHM,
         sub="pytest-user",
         exp=datetime.now(timezone.utc) + timedelta(minutes=30),

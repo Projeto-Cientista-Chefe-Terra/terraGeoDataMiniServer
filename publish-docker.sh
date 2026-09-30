@@ -22,7 +22,7 @@ if ! podman login --get-login docker.io >/dev/null 2>&1; then
 fi
 
 echo "==> Build: $IMAGE:$VERSION"
-podman build -f Dockerfile.tgdmserver -t "$IMAGE:$VERSION" -t "$IMAGE:latest" .
+podman build --format docker -f Dockerfile.tgdmserver -t "$IMAGE:$VERSION" -t "$IMAGE:latest" .
 
 echo "==> Push: $IMAGE:$VERSION"
 podman push "$IMAGE:$VERSION"

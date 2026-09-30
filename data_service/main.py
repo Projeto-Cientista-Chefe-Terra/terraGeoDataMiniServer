@@ -2,6 +2,7 @@
 
 import json
 import logging
+import time
 from typing import List, Dict, Any, Optional
 from contextlib import asynccontextmanager
 
@@ -9,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from brotli_asgi import BrotliMiddleware
-from pythonjsonlogger import jsonlogger
+from pythonjsonlogger.json import JsonFormatter
 from sqlalchemy import text
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
@@ -18,12 +19,13 @@ from functools import lru_cache
 from config import settings, DatabaseType
 from .db import get_sqlalchemy_engine
 from .utils import row_to_feature
+from .privacidade import nome_proprietario_publico, pseudonimo_proprietario
 
 # ==================== Configuração de Logs ====================
 logger = logging.getLogger("uvicorn")
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler()
-formatter = jsonlogger.JsonFormatter(
+formatter = JsonFormatter(
     fmt="%(asctime)s %(levelname)s %(message)s %(module)s %(funcName)s"
 )
 handler.setFormatter(formatter)
@@ -35,10 +37,14 @@ security = HTTPBearer()
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(
-            credentials.credentials, 
-            settings.JWT_SECRET, 
-            algorithms=[settings.JWT_ALGORITHM]
+            credentials.credentials,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+            audience=settings.JWT_AUDIENCE,
+            options={"require": ["exp", "iat", "aud", "iss"]},
         )
+        if payload.get("iss") not in settings.JWT_ISSUERS:
+            raise jwt.InvalidIssuerError("Emissor não autorizado")
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -68,11 +74,12 @@ async def lifespan(app: FastAPI):
 # ==================== App FastAPI ====================
 app = FastAPI(
     title="terraGeoDataMiniServer",
+    version="1.2.0",
     lifespan=lifespan
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_methods=["GET"],
     allow_headers=["*"],
 )
@@ -108,8 +115,21 @@ def _geom_sql(tolerance: Optional[float] = None, decimals: Optional[int] = None)
     return f"ST_AsGeoJSON(ST_Simplify(geometry, {tol}), {dec})"
 
 # ==================== Funções Principais  ====================
-@lru_cache(maxsize=32)
-def fetch_regioes(_: dict = Depends(verify_token)) -> List[str]:
+def _janela_cache() -> int:
+    """Número da janela de tempo atual. Muda a cada CACHE_LISTAS_SEGUNDOS e expira o lru_cache."""
+    return int(time.time() // max(settings.CACHE_LISTAS_SEGUNDOS, 1))
+
+
+def fetch_regioes() -> List[str]:
+    return _fetch_regioes(_janela_cache())
+
+
+def fetch_municipios(regiao: str) -> List[str]:
+    return _fetch_municipios(regiao, _janela_cache())
+
+
+@lru_cache(maxsize=4)
+def _fetch_regioes(janela: int) -> List[str]:
     """Retorna todas as regiões administrativas."""
     sql = f"""
         SELECT DISTINCT regiao_administrativa
@@ -121,8 +141,8 @@ def fetch_regioes(_: dict = Depends(verify_token)) -> List[str]:
         rows = conn.execute(text(sql)).mappings().all()
     return [r['regiao_administrativa'] for r in rows]
 
-@lru_cache(maxsize=32)
-def fetch_municipios(regiao: str, _: dict = Depends(verify_token)) -> List[str]:
+@lru_cache(maxsize=64)
+def _fetch_municipios(regiao: str, janela: int) -> List[str]:
     """Retorna municípios de uma região."""
     where = _ci_equals("regiao_administrativa", "regiao")
     sql = f"""
@@ -247,6 +267,15 @@ def geojson_muni(
         }
     }
 
+def _proteger_nome_nas_features(colecao: Dict[str, Any]) -> Dict[str, Any]:
+    """Troca o nome de proprietário pessoa física pelo texto de proteção (LGPD)."""
+    for feature in colecao.get("features", []):
+        propriedades = feature.get("properties") or {}
+        if "nome_proprietario" in propriedades:
+            propriedades["nome_proprietario"] = nome_proprietario_publico(propriedades["nome_proprietario"])
+    return colecao
+
+
 @app.get("/geojson")
 def geojson(
     regiao: str = Query(None),
@@ -259,22 +288,22 @@ def geojson(
     if bool(regiao) == bool(municipio):
         raise HTTPException(400, "Informe 'regiao' OU 'municipio'.")
     if regiao:
-        return _get_geojson(  # CORREÇÃO AQUI: usar _get_geojson em vez de _get_geojson_from_file_or_db
+        return _proteger_nome_nas_features(_get_geojson(
             "regiao", regiao,
             settings.TABLE_DADOS_FUNDIARIOS,
             'regiao_administrativa',
             COMMON_PROPERTY_COLUMNS,
             tolerance=tolerance,
             decimals=decimals
-        )
-    return _get_geojson(  # CORREÇÃO AQUI: usar _get_geojson em vez de _get_geojson_from_file_or_db
+        ))
+    return _proteger_nome_nas_features(_get_geojson(
         "municipio", municipio,
         settings.TABLE_DADOS_FUNDIARIOS,
         'nome_municipio',
         COMMON_PROPERTY_COLUMNS,
         tolerance=tolerance,
         decimals=decimals
-    )
+    ))
 
 @app.get("/dados_fundiarios")
 def dados_fundiarios(
@@ -282,7 +311,11 @@ def dados_fundiarios(
     municipio: str = Query(None),
     _: dict = Depends(verify_token)
 ):
-    """Dados tabulares (sem geometria)."""
+    """Dados tabulares (sem geometria).
+
+    O nome do proprietário sai protegido conforme a LGPD, e ``id_proprietario``
+    traz um pseudônimo estável para agrupar os imóveis de um mesmo dono.
+    """
     if bool(regiao) == bool(municipio):
         raise HTTPException(400, "Informe 'regiao' OU 'municipio'.")
     where, val = (
@@ -298,7 +331,14 @@ def dados_fundiarios(
         rows = conn.execute(text(sql), {"param": val}).fetchall()
     if not rows:
         raise HTTPException(404, "Nenhum dado encontrado.")
-    return [dict(zip(COMMON_PROPERTY_COLUMNS[:-1], r)) for r in rows]
+    registros = []
+    for linha in rows:
+        registro = dict(zip(COMMON_PROPERTY_COLUMNS[:-1], linha))
+        nome = registro.get("nome_proprietario")
+        registro["id_proprietario"] = pseudonimo_proprietario(nome)
+        registro["nome_proprietario"] = nome_proprietario_publico(nome)
+        registros.append(registro)
+    return registros
 
 @app.get("/geojson_assentamentos")
 def geojson_assentamentos(
@@ -484,6 +524,28 @@ def geojson_reservatorios(
             "properties": {"name": "urn:ogc:def:crs:EPSG::4326"}
         }
     }
+
+@app.get("/versao_dados")
+def versao_dados(_: dict = Depends(verify_token)):
+    """Data da carga de dados mais recente e o registro de cada tabela.
+
+    O dashboard usa ``versao`` como chave de cache: quando ela muda, os dados
+    são recarregados. Sem registro de carga, ``versao`` é None.
+    """
+    sql = f"SELECT tabela, registros, concluida_em FROM {settings.TABLE_CARGAS} ORDER BY tabela"
+    try:
+        with get_engine().connect() as conn:
+            linhas = conn.execute(text(sql)).mappings().all()
+    except Exception as e:
+        logger.warning("Registro de cargas indisponível: %s", e)
+        return {"versao": None, "cargas": []}
+    cargas = [
+        {"tabela": l["tabela"], "registros": l["registros"], "concluida_em": str(l["concluida_em"])}
+        for l in linhas
+    ]
+    versao = max((c["concluida_em"] for c in cargas), default=None)
+    return {"versao": versao, "cargas": cargas}
+
 
 @app.get("/reservatorios_municipios")
 def listar_municipios_reservatorios(_: dict = Depends(verify_token)):

@@ -1,54 +1,46 @@
-# Dockerfile do tgdmserver
+# Dockerfile do tgdmserver (terraGeoDataMiniServer)
 
-FROM python:3.13-slim-bullseye
+FROM python:3.13.11-slim-trixie
 
 LABEL maintainer="Wellington Wagner F. Sarmento <wwagner@virtual.ufc.br>" \
-      description="Dockerfile do Terra.Ce"
+      description="terraGeoDataMiniServer (Terra.Ce)"
 
 WORKDIR /tgdmserver
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_ROOT_USER_ACTION=ignore \
+    TZ=America/Fortaleza \
+    TGDMSERVER_HOST=0.0.0.0 \
+    TGDMSERVER_PORT=8000 \
     GUNICORN_WORKERS=4 \
     GUNICORN_THREADS=8 \
-    TZ=America/Fortaleza
+    GUNICORN_TIMEOUT=120 \
+    GUNICORN_LOG_LEVEL=info
 
-# Instala dependências do sistema
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-    build-essential \
-    gdal-bin \
-    libgdal-dev \
-    python3-gdal \
-    libgeos-dev \
-    libproj-dev \
-    libpq-dev \
-    tzdata \
-    sqlite3 \
-    libsqlite3-mod-spatialite && \
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
-    echo $TZ > /etc/timezone && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
-ENV C_INCLUDE_PATH=/usr/include/gdal
-
-RUN mkdir -p /tgdmserver/upload \
-    && chown -R 1000:1000 /tgdmserver/upload \
-    && chmod -R 664 /tgdmserver/upload
+# geopandas, shapely, pyproj e psycopg2-binary trazem GDAL, GEOS, PROJ e libpq
+# nas próprias wheels. O SpatiaLite só é usado com DATABASE_TYPE=sqlite.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tzdata libsqlite3-mod-spatialite \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir gunicorn
+RUN pip install -r requirements.txt
 
-COPY . .
+RUN useradd --create-home --uid 10001 terra \
+    && mkdir -p /tgdmserver/upload /tgdmserver/logs /tgdmserver/data \
+    && chown -R terra:terra /tgdmserver
+COPY --chown=terra:terra . .
+RUN chmod +x /tgdmserver/entrypoint.sh
+USER terra
 
 EXPOSE 8000
 
-COPY entrypoint.sh /tgdmserver/entrypoint.sh
-RUN chmod +x /tgdmserver/entrypoint.sh
+# A carga dos CSVs roda antes do gunicorn e leva alguns minutos.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=900s --retries=3 \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('TGDMSERVER_PORT', '8000') + '/health', timeout=4)"
 
 ENTRYPOINT ["/tgdmserver/entrypoint.sh"]

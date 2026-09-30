@@ -1,0 +1,6 @@
+# Dependências diretas usadas só em testes.
+pytest
+httpx
+requests-mock
+# sqlite3 com extensões carregáveis, usado pelos testes (ver tests/conftest.py).
+pysqlite3-binary

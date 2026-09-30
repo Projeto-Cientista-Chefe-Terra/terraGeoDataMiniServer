@@ -7,6 +7,8 @@ DADOS_FUNDIARIOS_COLUMNS = {
     "numero_lote", "numero_incra", "situacao_juridica", "modulo_fiscal", "area",
     "nome_municipio", "nome_proprietario", "nome_distrito", "numero_titulo",
     "regiao_administrativa", "categoria", "nome_municipio_original", "imovel",
+    # Pseudônimo do proprietário (LGPD), desde a versão 1.2.0.
+    "id_proprietario",
 }
 
 
