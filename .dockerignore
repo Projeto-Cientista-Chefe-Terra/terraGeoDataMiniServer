@@ -1,5 +1,9 @@
 # Segredos e ambientes locais
 .env
+# Os CSVs têm dados pessoais (nomes de proprietários) e não podem entrar na imagem publicada.
+# O rm -rf do entrypoint só apaga a pasta no container; nas camadas da imagem ela continuaria.
+# Para uma carga, monte a pasta em /tgdmserver/datasets e use IMPORTAR_DADOS_NA_INICIALIZACAO=true.
+datasets/
 *.env
 .venv/
 .git/
